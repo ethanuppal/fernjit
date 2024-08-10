@@ -1,6 +1,13 @@
 # Copyright (C) 2024 Ethan Uppal. All rights reserved.
 # currently a hack until I get it working on Apple Silicon
 
+.PHONY: test_native
+test_native:
+	cargo nextest run
+
+.PHONY: test
+	rustup run stable-x86_64-apple-darwin cargo test
+
 .PHONY: build
 build:
 	rustup run stable-x86_64-apple-darwin cargo build
