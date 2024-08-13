@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
-use fernjit::{executable_memory::ExecutableMemory, opcode::Op, vm::VM};
+use fernjit::executable_memory::ExecutableMemory;
 use std::{io, mem};
 
 fn main() -> io::Result<()> {

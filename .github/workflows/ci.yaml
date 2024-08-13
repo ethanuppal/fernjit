@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    strategy:
+      matrix:
+        os: [macos-14, macos-13, macos-12]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust Caching
+        uses: Swatinem/rust-cache@v2.7.3
+      - name: Build
+        run: make build
+      - name: Test
+        run: make test
+      - name: Lint
+        run: make lint

@@ -45,7 +45,7 @@ impl VM {
                     Err(ExecuteError::InvalidArgs)
                 }
             }
-            Op::MovI(a, i) => {
+            Op::MovI(a, _) => {
                 if a.is_valid() {
                     Ok(())
                 } else {

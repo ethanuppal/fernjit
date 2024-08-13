@@ -21,3 +21,7 @@ run: build
 asm:
 	cargo build --release
 	objdump -d target/release/fernjit | less
+
+.PHONY: lint
+lint:
+	cargo clippy
