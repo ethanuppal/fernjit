@@ -10,8 +10,6 @@ pub struct ExecutableMemory {
 impl ExecutableMemory {
     pub fn of_size(length: usize) -> io::Result<ExecutableMemory> {
         unsafe {
-            // not sure why I mmap then mprotect, just porting some old C code I
-            // wrote
             let page_size = {
                 let result = libc::sysconf(libc::_SC_PAGESIZE);
                 if result == -1 {
@@ -32,6 +30,7 @@ impl ExecutableMemory {
             if start == libc::MAP_FAILED {
                 return Err(io::Error::last_os_error());
             }
+            // doesn't work on silicon :(
             // if libc::mprotect(
             //     start,
             //     aligned_length,

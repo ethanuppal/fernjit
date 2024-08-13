@@ -2,4 +2,5 @@
 
 pub mod arch;
 pub mod executable_memory;
-pub mod instruction;
+pub mod opcode;
+pub mod vm;
