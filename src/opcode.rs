@@ -2,6 +2,7 @@
 
 // this file is a mess
 // PLEASE clean it up
+// TODO: casting to signed probably doesn't work
 
 use crate::{
     arch::{Word, REGISTER_BITS},
@@ -285,10 +286,8 @@ impl Op {
         Some(())
     }
 
-    pub fn decode_from(stream: &[Word], index: &mut usize) -> Option<Self> {
-        let result = Self::decode_packed(stream[*index]);
-        *index += 1;
-        result
+    pub fn decode_from(stream: &[Word], index: usize) -> Option<(Self, usize)> {
+        Some((Self::decode_packed(stream[index])?, 1))
     }
 }
 

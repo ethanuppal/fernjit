@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
-use fernjit::executable_memory::ExecutableMemory;
+use fernjit::{executable_memory::ExecutableMemory, opcode::Op, vm::VM};
 use std::{io, mem};
 
 fn main() -> io::Result<()> {
@@ -18,5 +18,6 @@ fn main() -> io::Result<()> {
 
     let func: fn() -> () = unsafe { mem::transmute(jit_mem.start()) };
     func();
+
     Ok(())
 }

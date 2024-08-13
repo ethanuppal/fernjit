@@ -1,5 +1,4 @@
-// Copyright (Copyright (c) 2024 Ethan Uppal. All rightsrReserved.
-
+// Copyright (C) 2024 Ethan Uppal. All rights reserved.
 use crate::{
     arch::{IsValid, Word, CODE_SIZE, MEMORY_SIZE, REGISTER_COUNT},
     opcode::Op
@@ -35,35 +34,61 @@ impl VM {
         self.ip = pos;
     }
 
-    pub fn step(&mut self) -> Result<(), ExecuteError> {
-        self.ip += match Op::decode_from(&self.code, &mut self.ip)
-            .ok_or(ExecuteError::InvalidOp)?
-        {
+    pub fn validate(&self) -> Result<(Op, usize), ExecuteError> {
+        let (op, length) = Op::decode_from(&self.code, self.ip)
+            .ok_or(ExecuteError::InvalidOp)?;
+        match op {
             Op::Mov(a, b) => {
                 if a.is_valid() && b.is_valid() {
-                    self.registers[a] = self.registers[b];
-                    Ok(0)
+                    Ok(())
                 } else {
                     Err(ExecuteError::InvalidArgs)
                 }
             }
             Op::MovI(a, i) => {
                 if a.is_valid() {
-                    self.registers[a] = i;
-                    Ok(0)
+                    Ok(())
                 } else {
                     Err(ExecuteError::InvalidArgs)
                 }
             }
             Op::Add(a, b, c) => {
                 if a.is_valid() && b.is_valid() && c.is_valid() {
-                    self.registers[a] = self.registers[b] + self.registers[c];
-                    Ok(0)
+                    Ok(())
                 } else {
                     Err(ExecuteError::InvalidArgs)
                 }
             }
-        }?;
+        }
+        .and(Ok((op, length)))
+    }
+
+    pub fn step(&mut self) -> Result<(), ExecuteError> {
+        let (op, length) = {
+            #[cfg(feature = "validate")]
+            self.validate()?;
+
+            #[cfg(not(feature = "validate"))]
+            unsafe {
+                Op::decode_from(&self.code, self.ip).unwrap_unchecked()
+            }
+        };
+
+        self.ip += length
+            + match op {
+                Op::Mov(a, b) => {
+                    self.registers[a] = self.registers[b];
+                    0
+                }
+                Op::MovI(a, i) => {
+                    self.registers[a] = i;
+                    0
+                }
+                Op::Add(a, b, c) => {
+                    self.registers[a] = self.registers[b] + self.registers[c];
+                    0
+                }
+            };
         Ok(())
     }
 }

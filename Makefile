@@ -6,6 +6,7 @@ test_native:
 	cargo nextest run
 
 .PHONY: test
+test:
 	rustup run stable-x86_64-apple-darwin cargo test
 
 .PHONY: build
@@ -15,3 +16,8 @@ build:
 .PHONY: run
 run: build
 	arch -x86_64 target/debug/jit
+
+.PHONY: asm
+asm:
+	cargo build --release
+	objdump -d target/release/fernjit | less
