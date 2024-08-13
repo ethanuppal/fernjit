@@ -5,6 +5,10 @@
 test_native:
 	cargo nextest run
 
+.PHONY: deps
+deps:
+	rustup toolchain install stable-x86_64-apple-darwin
+
 .PHONY: test
 test:
 	rustup run stable-x86_64-apple-darwin cargo test
