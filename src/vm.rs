@@ -81,8 +81,6 @@ impl VM {
             self.next()
         };
 
-        println!("running {:?}", op);
-
         self.ip += length
             + match op {
                 Op::Mov(a, b) => {
@@ -116,9 +114,7 @@ mod tests {
 
     #[test]
     fn basic_program() {
-        println!("start");
         let mut vm = VM::default();
-        println!("test");
         vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1)])
             .expect("invalid program");
         vm.run().expect("failed to run program");
