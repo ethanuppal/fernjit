@@ -21,11 +21,18 @@ impl ExecutableMemory {
                 }
             }?;
             let aligned_length = (length + page_size - 1) & !(page_size - 1);
+
+            #[cfg(target_os = "macos")]
+            let flags = libc::MAP_JIT | libc::MAP_ANON | libc::MAP_PRIVATE;
+
+            #[cfg(not(target_os = "macos"))]
+            let flags = libc::MAP_ANON | libc::MAP_PRIVATE;
+
             let start = libc::mmap(
                 ptr::null_mut(),
                 aligned_length,
                 libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
-                libc::MAP_JIT | libc::MAP_ANON | libc::MAP_PRIVATE,
+                flags,
                 -1,
                 0
             );
