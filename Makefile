@@ -1,25 +1,36 @@
 # Copyright (C) 2024 Ethan Uppal. All rights reserved.
 # currently a hack until I get it working on Apple Silicon
 
+UNAME := $(shell uname)
+ifeq ($(UNAME), Darwin)
+PREFIX := rustup run stable-x86_64-apple-darwin
+endif
+
 .PHONY: test_native
 test_native:
 	cargo nextest run
 
 .PHONY: deps
 deps:
+ifeq ($(UNAME), Darwin)
 	rustup toolchain install stable-x86_64-apple-darwin
+endif
 
 .PHONY: test
 test:
-	rustup run stable-x86_64-apple-darwin cargo test
+	$(PREFIX) cargo test
 
 .PHONY: build
 build:
-	rustup run stable-x86_64-apple-darwin cargo build
+	$(PREFIX) cargo build
 
 .PHONY: run
 run: build
-	arch -x86_64 target/debug/jit
+ifeq ($(UNAME), Darwin)
+	arch -x86_64 target/debug/fernjit
+else
+	target/debug/fernjit
+endif
 
 .PHONY: asm
 asm:
