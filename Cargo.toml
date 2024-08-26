@@ -1,6 +1,6 @@
 [package]
 name = "fernjit"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 license-file = "LICENSE"
 
@@ -9,5 +9,6 @@ validate = []
 
 [dependencies]
 libc = "0.2.155"
+num-traits = "0.2.19"
 paste = "1.0.15"
 static_assertions = "1.1.0"
