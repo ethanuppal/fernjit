@@ -16,7 +16,7 @@ jobs:
         os: [macos-14, macos-13, macos-12, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - name: Rust Caching
         uses: Swatinem/rust-cache@v2.7.3
       - name: Install dependencies
