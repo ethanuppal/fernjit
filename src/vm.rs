@@ -1,95 +1,111 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
+
 use crate::{
-    arch::{IsValid, Word, CODE_SIZE, MEMORY_SIZE, REGISTER_COUNT},
-    opcode::Op
+    arch::{Address, Offset, Word, CODE_SIZE, STACK_SIZE},
+    opcode::{EncodeAsOp, Op, OpCodingError}
 };
 
 pub struct VM {
-    pub code: [Word; CODE_SIZE],
-    pub registers: [Word; REGISTER_COUNT],
-    pub memory: [Word; MEMORY_SIZE],
-    ip: usize
+    pub code: Box<[Word]>,
+    pub stack: Box<[Word]>,
+    ip: usize,
+    sp: Address,
+    bp: Address,
+    code_length: usize
 }
 
 #[derive(Debug)]
-pub enum ExecuteError {
+pub enum VMError {
     InvalidOp,
-    InvalidArgs
+    InvalidArgs,
+    CodeOversized
+}
+
+impl From<OpCodingError> for VMError {
+    fn from(value: OpCodingError) -> Self {
+        match value {
+            OpCodingError::NoSpace => VMError::CodeOversized,
+            OpCodingError::Other => VMError::InvalidOp
+        }
+    }
 }
 
 impl Default for VM {
     fn default() -> Self {
         Self {
-            code: [0; CODE_SIZE],
-            registers: [0; REGISTER_COUNT],
-            memory: [0; MEMORY_SIZE],
-            ip: 0
+            code: vec![0; CODE_SIZE].into_boxed_slice(),
+            stack: vec![0; STACK_SIZE].into_boxed_slice(),
+            ip: 0,
+            sp: 0,
+            bp: 0,
+            code_length: 0
         }
     }
 }
 
 impl VM {
-    pub fn jump(&mut self, pos: usize) {
-        assert!(pos < self.code.len());
-        self.ip = pos;
-    }
-
-    pub fn validate(&self) -> Result<(Op, usize), ExecuteError> {
-        let (op, length) = Op::decode_from(&self.code, self.ip)
-            .ok_or(ExecuteError::InvalidOp)?;
-        match op {
-            Op::Mov(a, b) => {
-                if a.is_valid() && b.is_valid() {
-                    Ok(())
-                } else {
-                    Err(ExecuteError::InvalidArgs)
-                }
-            }
-            Op::MovI(a, _) => {
-                if a.is_valid() {
-                    Ok(())
-                } else {
-                    Err(ExecuteError::InvalidArgs)
-                }
-            }
-            Op::Add(a, b, c) => {
-                if a.is_valid() && b.is_valid() && c.is_valid() {
-                    Ok(())
-                } else {
-                    Err(ExecuteError::InvalidArgs)
-                }
-            }
+    pub fn load<O: EncodeAsOp>(
+        &mut self, program: &[O]
+    ) -> Result<(), VMError> {
+        let mut pos = 0;
+        for op in program {
+            op.encode_into(self.code.as_mut(), &mut pos)?;
         }
-        .and(Ok((op, length)))
+        self.code_length = pos;
+        self.ip = 0;
+        Ok(())
     }
 
-    pub fn step(&mut self) -> Result<(), ExecuteError> {
-        let (op, length) = {
-            #[cfg(feature = "validate")]
-            self.validate()?;
+    pub fn run(&mut self) -> Result<(), VMError> {
+        while self.ip != self.code_length {
+            self.step()?;
+        }
+        Ok(())
+    }
 
-            #[cfg(not(feature = "validate"))]
-            unsafe {
-                Op::decode_from(&self.code, self.ip).unwrap_unchecked()
-            }
+    fn next(&self) -> (Op, usize) {
+        unsafe {
+            Op::decode_from(self.code.as_ref(), self.ip).unwrap_unchecked()
+        }
+    }
+
+    fn next_validate(&self) -> Result<(Op, usize), VMError> {
+        let (op, length) = Op::decode_from(self.code.as_ref(), self.ip)?;
+        Ok((op, length))
+    }
+
+    fn step(&mut self) -> Result<(), VMError> {
+        let (op, length) = if cfg!(feature = "validate") {
+            self.next_validate()?
+        } else {
+            self.next()
         };
+
+        println!("running {:?}", op);
 
         self.ip += length
             + match op {
                 Op::Mov(a, b) => {
-                    self.registers[a] = self.registers[b];
+                    self.stack[self.index_from_local(a)] =
+                        self.stack[self.index_from_local(b)];
                     0
                 }
                 Op::MovI(a, i) => {
-                    self.registers[a] = i;
+                    self.stack[self.index_from_local(a)] = i;
                     0
                 }
                 Op::Add(a, b, c) => {
-                    self.registers[a] = self.registers[b] + self.registers[c];
+                    self.stack[self.index_from_local(a)] = self.stack
+                        [self.index_from_local(b)]
+                        + self.stack[self.index_from_local(c)];
                     0
                 }
             };
         Ok(())
+    }
+
+    fn index_from_local(&self, offset: Offset) -> usize {
+        ((self.bp as Offset) + offset) as usize
     }
 }
 
@@ -100,20 +116,14 @@ mod tests {
 
     #[test]
     fn basic_program() {
+        println!("start");
         let mut vm = VM::default();
-        for (i, op) in [Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1)]
-            .iter()
-            .enumerate()
-        {
-            vm.code[i] =
-                op.encode_packed().expect("constructed malformed program");
-        }
-        vm.jump(0);
-        for _ in 0..3 {
-            vm.step().expect("failed to execute operation");
-        }
-        assert_eq!(1, vm.registers[0]);
-        assert_eq!(2, vm.registers[1]);
-        assert_eq!(3, vm.registers[2]);
+        println!("test");
+        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1)])
+            .expect("invalid program");
+        vm.run().expect("failed to run program");
+        assert_eq!(1, vm.stack[0]);
+        assert_eq!(2, vm.stack[1]);
+        assert_eq!(3, vm.stack[2]);
     }
 }
