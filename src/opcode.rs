@@ -1,7 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 // TODO: casting to signed probably doesn't work
-
 use crate::{
     arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS},
     bits
@@ -46,6 +45,8 @@ mod encoding {
          const_assert_eq!(bits![Word], OP_CODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS);
 //     | IX (extended immediate)                                                         | 
          const_assert_eq!(bits![Word], OP_CODE_BITS + IMM_EXT_BITS);
+//     | N (no operands)                                                                 |
+         const_assert!(OP_CODE_BITS <= bits![Word]);
 //     +---------------------------------------------------------------------------------+
 }
 
@@ -185,6 +186,11 @@ macro_rules! encode_opcode {
             ));
         }
     };
+    ($self:expr; $opname:ident as N) => {
+        return Some(encode!(Word;
+            [..OP_CODE_BITS..] = $self.opcode()
+        ));
+    };
 }
 
 macro_rules! decoded_opcode {
@@ -216,6 +222,13 @@ macro_rules! decoded_opcode {
             ) => Self::$opname(a, i)
         )
     };
+    ($encoded:expr; $opname:ident as N) => {
+        decode!($encoded; Word;
+            @(
+                _op: RawOpCode = [..OP_CODE_BITS..]
+            ) => Self::$opname()
+        )
+    };
 }
 
 macro_rules! implement_opcodes {
@@ -237,7 +250,6 @@ macro_rules! implement_opcodes {
                 $(
                     encode_opcode!(self; $opname as $encoding);
                 )*
-                None
             }
 
             pub fn decode_packed(encoded: Word) -> Option<$T> {
@@ -263,6 +275,7 @@ macro_rules! check_encoding {
     (AB) => {};
     (AI) => {};
     (Ix) => {};
+    (N) => {};
     ($other:ident) => {
         compile_error!(concat!(
             "Invalid encoding: ",
@@ -276,7 +289,7 @@ macro_rules! opcodes {
     (#[derive($($derive:ident),* $(,)?)] $vis:vis enum $T:ident {
         $(
             $(#[doc = $doc:literal])?
-            $opname:ident($($variant:ty),* $(,)?) encode $encoding:ident
+            $opname:ident($($param:ty),* $(,)?) encode $encoding:ident
         ),* $(,)?
     }) => {
         paste::paste! {
@@ -284,7 +297,7 @@ macro_rules! opcodes {
             $vis enum $T {
                 $(
                     #[doc = $($doc)* "\n\nUses the `" $encoding "` encoding"]
-                    $opname($($variant),*)
+                    $opname($($param),*)
                 ),*
             }
         }
@@ -302,6 +315,7 @@ opcodes! {
         Mov(LocalAddress, LocalAddress) encode AB,
         MovI(LocalAddress, Immediate) encode AI,
         Add(LocalAddress, LocalAddress, LocalAddress) encode ABC,
+        Ret() encode N,
     }
 }
 
@@ -371,5 +385,6 @@ mod tests {
             ),
             Op::Mov(1, 1).encode_packed()
         );
+        assert_eq!(Some(Op::Ret().opcode() as u32), Op::Ret().encode_packed());
     }
 }
