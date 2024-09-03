@@ -315,7 +315,7 @@ opcodes! {
         Mov(LocalAddress, LocalAddress) encode AB,
         MovI(LocalAddress, Immediate) encode AI,
         Add(LocalAddress, LocalAddress, LocalAddress) encode ABC,
-        Ret() encode N,
+        Ret() encode N,  // TODO: avoid parens here?
     }
 }
 
