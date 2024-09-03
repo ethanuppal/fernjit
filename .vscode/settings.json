@@ -4,4 +4,5 @@
         "rustfmt",
         "+nightly",
     ],
+    "makefile.configureOnOpen": false,
 }
