@@ -89,6 +89,8 @@ impl VM {
 
         let ip = self.ip();
 
+        // TODO: I don't like doing move_ip everywhere, but there are some
+        // places where we don't want to. What to do here?
         match op {
             Op::Mov(to, from) => {
                 self.write_local(to, self.read_local(from));
