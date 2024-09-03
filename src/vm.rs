@@ -89,25 +89,27 @@ impl VM {
 
         let ip = self.ip();
 
-        let new_ip = match op {
+        match op {
             Op::Mov(to, from) => {
                 self.write_local(to, self.read_local(from));
-                ip + length
+                self.move_ip(ip + length)
             }
             Op::MovI(to, constant) => {
                 self.write_local(to, constant);
-                ip + length
+                self.move_ip(ip + length)
             }
             Op::Add(to, first, second) => {
                 self.write_local(
                     to,
                     self.read_local(first) + self.read_local(second)
                 );
-                ip + length
+                self.move_ip(ip + length)
             }
-        };
-
-        self.move_ip(new_ip)?;
+            Op::Ret() => {
+                self.call_stack.pop();
+                Ok(())
+            }
+        }?;
 
         Ok(())
     }
@@ -157,11 +159,17 @@ mod tests {
     #[test]
     fn basic_program() {
         let mut vm = VM::default();
-        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1)])
+        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret()])
             .expect("invalid program");
+
+        for _ in 0..3 {
+            vm.step().expect("failed to run program");
+        }
+
+        assert_eq!(1, vm.top_frame().locals[0]);
+        assert_eq!(2, vm.top_frame().locals[1]);
+        assert_eq!(3, vm.top_frame().locals[2]);
+
         vm.run().expect("failed to run program");
-        // assert_eq!(1, vm.stack[0]);
-        // assert_eq!(2, vm.stack[1]);
-        // assert_eq!(3, vm.stack[2]);
     }
 }
