@@ -4,7 +4,7 @@ use std::vec;
 
 use crate::{
     arch::{LocalAddress, Word, CODE_SIZE, LOCALS_SIZE},
-    opcode::{EncodeAsOp, Op, OpCodingError}
+    opcode::{EncodeIntoOpStream, Op, OpCodingError}
 };
 
 struct StackFrame {
@@ -46,7 +46,7 @@ impl Default for VM {
 }
 
 impl VM {
-    pub fn load<O: EncodeAsOp>(
+    pub fn load<O: EncodeIntoOpStream>(
         &mut self, program: &[O]
     ) -> Result<(), VMError> {
         let mut pos = 0;

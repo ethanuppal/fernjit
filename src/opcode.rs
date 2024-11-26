@@ -3,13 +3,17 @@
 // TODO: casting to signed probably doesn't work
 use crate::{
     arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS},
-    bits
+    bits,
+    coding::Encodable,
+    decode, encode
 };
 
 /// Smallest sized integer type that can fit an op code.
 pub type RawOpCode = u8;
+
 /// Smallest sized integer type that can fit an immediate value.
 pub type Immediate = u16;
+
 /// Smallest sized integer type that can fit an extended immediate value.
 pub type ExtendedImmediate = u32;
 
@@ -50,111 +54,22 @@ mod encoding {
 //     +---------------------------------------------------------------------------------+
 }
 
-/// Iteratively constructs a bitset of a given type from bit fields.
-///
-/// TODO: (once the change happens, add this) One must take great care when
-/// encoding structs. Ensure the memory layout is correct. If you try to encode
-/// a larger struct into a smaller slot, the top bits will be chopped off, as
-/// with any value!
-///
-/// # Example
-///
-/// ```
-/// use fernjit::encode;
-///
-/// assert_eq!((1 << 8) | (2 << 16), encode!(u32;
-///     [..8..] = 0,
-///     [..8..] = 1,
-///     [..*] = 2 // optional
-/// ));
-/// ```
-#[macro_export] // for doctest
-macro_rules! encode {
-    (
-        $T:ty;
-        $([..$($width:literal)?$($width2:ident)?..] = $int:expr),*
-        $(,[..*] = $final:expr)?
-    ) => {
-        {
-            let mut offset = 0;
-            let mut result: $T = 0;
-            $(
-                // TODO: wrong, transmute might actually fail to compile if $int is bigger that width, which is a scenario we have to allow
-                let encoded_int: $T = $int.encode_into_op();
-                let mask: $T = (((1 as $T) << $($width)* $($width2)*) - 1) as $T;
-                result |= ((encoded_int & mask) << offset);
-                offset += $($width)* $($width2)*;
-            )*
-            $(
-                let encoded_final: $T = $final.encode_into_op();
-                let mask: $T = ((1 << offset) - 1) as $T;
-                result |= ((encoded_final & mask) << offset);
-            )*
-            let _ = offset;
-            result
-        }
-    };
-}
-
-// TODO: better name?
-/// Traits for types that can be encoded as part of an Op
-trait EncodeIntoOp {
-    // TODO: this doc sucks
-    /// Encodes `self` into a raw op. Higher bits will be chopped off if fitting
-    /// a larger type into a smaller slot. For example, if you try to encode a
-    /// `0b11110000u8` into a 4-bit slot, and your `encode_into_op`
-    /// implementation just uses `as Word`, you'll only get `0b0000`
-    /// encoded.  
-    fn encode_into_op(&self) -> Word;
-}
-
-impl EncodeIntoOp for u8 {
-    fn encode_into_op(&self) -> Word {
+impl Encodable<Word> for RawOpCode {
+    fn encode_into(&self) -> Word {
         *self as Word
     }
 }
 
-impl EncodeIntoOp for u16 {
-    fn encode_into_op(&self) -> Word {
+impl Encodable<Word> for Immediate {
+    fn encode_into(&self) -> Word {
         *self as Word
     }
 }
 
-/// Deconstructs a bitset of a given type into bitfields of given types.
-///
-/// # Example
-///
-/// ```
-/// use fernjit::decode;
-///
-/// decode!((1 << 8) | (2 << 16); u32;
-///     @(a: u32 = [..8..], b = [..8..], c = [..8..]) => {
-///         assert_eq!(0, a);
-///         assert_eq!(1, b);
-///         assert_eq!(2, c);
-///     }
-/// );
-/// ```
-#[macro_export] // for doctest
-macro_rules! decode {
-    (
-        $encoded:expr; $TEnc:ty;
-        @($($out:ident $(: $T:ty)? =
-            [..$($width:literal)?$($width2:ident)?..]),*)
-        => $block:expr
-    ) => {{
-        let mut __offset = 0;
-        const TENC_BITS: $TEnc = $crate::bits![$TEnc] as $TEnc;
-        $(
-            let paste::paste!([<__width $out>]) =
-                $($width)*$($width2)* as $TEnc;
-            let mask = (((1 as $TEnc) << paste::paste!([<__width $out>])) - 1) as $TEnc;
-            let unsigned_out = (($encoded >> __offset) & mask) as $TEnc;
-            let $out $(: $T)* = (((unsigned_out << (TENC_BITS - paste::paste!([<__width $out>])))) >> (TENC_BITS - paste::paste!([<__width $out>]))).try_into().unwrap();
-            __offset += paste::paste!([<__width $out>]);
-        )*
-        $block
-    }};
+impl Encodable<Word> for ExtendedImmediate {
+    fn encode_into(&self) -> Word {
+        *self as Word
+    }
 }
 
 macro_rules! encode_opcode {
@@ -324,25 +239,14 @@ pub enum OpCodingError {
     Other
 }
 
-pub trait EncodeAsOp {
+pub trait EncodeIntoOpStream {
+    /// Encodes a representation of an operation into a `stream` at the given
+    /// `index`.
     fn encode_into(
         &self, stream: &mut [Word], index: &mut usize
     ) -> Result<(), OpCodingError>;
 }
 
-// so I can easily switch between packed and VL encoding
-impl EncodeAsOp for Op {
-    fn encode_into(
-        &self, stream: &mut [Word], index: &mut usize
-    ) -> Result<(), OpCodingError> {
-        if *index >= stream.len() {
-            return Err(OpCodingError::NoSpace);
-        }
-        stream[*index] = self.encode_packed().ok_or(OpCodingError::Other)?;
-        *index += 1;
-        Ok(())
-    }
-}
 impl Op {
     /// Decodes an `Op` from a `stream` starting at the given `index`. Returns
     /// the `Op` and the length used from the stream, in the case of
@@ -357,7 +261,21 @@ impl Op {
     }
 }
 
-impl EncodeAsOp for Word {
+// so I can easily switch between packed and VL encoding
+impl EncodeIntoOpStream for Op {
+    fn encode_into(
+        &self, stream: &mut [Word], index: &mut usize
+    ) -> Result<(), OpCodingError> {
+        if *index >= stream.len() {
+            return Err(OpCodingError::NoSpace);
+        }
+        stream[*index] = self.encode_packed().ok_or(OpCodingError::Other)?;
+        *index += 1;
+        Ok(())
+    }
+}
+
+impl EncodeIntoOpStream for Word {
     fn encode_into(
         &self, stream: &mut [Word], index: &mut usize
     ) -> Result<(), OpCodingError> {
