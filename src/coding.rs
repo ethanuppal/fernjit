@@ -90,22 +90,22 @@ mod tests {
     struct Testi8(i8);
     impl Encodable<u32> for Testi8 {
         fn encode_into(&self) -> u32 {
-            unsafe { std::mem::transmute::<i8, u8>(self.0) as u32 }
+            self.0.to_ne_bytes()[0] as u32
         }
 
         fn decode_from(encoded: u32) -> Self {
-            Self(unsafe { std::mem::transmute::<u8, i8>(encoded as u8) })
+            Self(i8::from_ne_bytes([encoded as u8]))
         }
     }
 
     struct Testi32(i32);
     impl Encodable<u32> for Testi32 {
         fn encode_into(&self) -> u32 {
-            unsafe { std::mem::transmute::<i32, u32>(self.0) }
+            u32::from_ne_bytes(self.0.to_ne_bytes())
         }
 
         fn decode_from(encoded: u32) -> Self {
-            Self(unsafe { std::mem::transmute::<u32, i32>(encoded) })
+            Self(i32::from_ne_bytes(encoded.to_ne_bytes()))
         }
     }
 
@@ -121,17 +121,15 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn encodes_signed_correctly() {
-    //     unsafe {
-    //         assert_eq!(
-    //             std::mem::transmute::<i32, u32>(-2),
-    //             encode!(u32;
-    //                 [..8..] = Testi8(-2)
-    //             )
-    //         );
-    //     }
-    // }
+    #[test]
+    fn encodes_signed_correctly() {
+        assert_eq!(
+            0x000000fe,
+            encode!(u32;
+                [..8..] = Testi8(-2)
+            )
+        );
+    }
 
     #[test]
     fn decodes_correctly() {
@@ -160,12 +158,10 @@ mod tests {
             }
         );
 
-        unsafe {
-            decode!(std::mem::transmute::<i32, u32>(-2); u32;
-                @(a: Testi32 = [..32..]) => {
-                    assert_eq!(-2, a.0);
-                }
-            )
-        }
+        decode!(0xfffffffe; u32;
+            @(a: Testi32 = [..32..]) => {
+                assert_eq!(-2, a.0);
+            }
+        )
     }
 }
