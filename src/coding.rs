@@ -1,3 +1,5 @@
+use crate::arch::Word;
+
 /// Iteratively constructs a bitset of a given type from bit fields.
 #[macro_export] // for doctest
 macro_rules! encode {
@@ -27,15 +29,15 @@ macro_rules! encode {
 }
 
 /// Traits for types that can be encoded as part of an Op
-pub trait Encodable<T> {
+pub trait CodeAsWord {
     /// Encodes `self` into a larger sequence. Higher bits will be chopped off
     /// if fitting a larger type into a smaller slot. For example, if you
     /// try to encode a `0b11110000u8` into a 4-bit slot of a `u32`, and
     /// your `encode_into_op` implementation just uses `as u32`, you'll only
     /// get `0b0000` encoded.
-    fn encode_into(&self) -> T;
+    fn encode_into(&self) -> Word;
 
-    fn decode_from(encoded: T) -> Self;
+    fn decode_from(encoded: Word) -> Self;
 }
 
 // TODO: idk if decode is as generic as encode... does it work with signed?
@@ -66,45 +68,45 @@ mod tests {
 
     // so we don't conflict with regular u8 impl
     struct Testu8(u8);
-    impl Encodable<u32> for Testu8 {
-        fn encode_into(&self) -> u32 {
-            self.0 as u32
+    impl CodeAsWord for Testu8 {
+        fn encode_into(&self) -> Word {
+            self.0 as Word
         }
 
-        fn decode_from(encoded: u32) -> Self {
+        fn decode_from(encoded: Word) -> Self {
             Self(encoded as u8)
         }
     }
 
     struct Testu16(u16);
-    impl Encodable<u32> for Testu16 {
-        fn encode_into(&self) -> u32 {
-            self.0 as u32
+    impl CodeAsWord for Testu16 {
+        fn encode_into(&self) -> Word {
+            self.0 as Word
         }
 
-        fn decode_from(encoded: u32) -> Self {
+        fn decode_from(encoded: Word) -> Self {
             Self(encoded as u16)
         }
     }
 
     struct Testi8(i8);
-    impl Encodable<u32> for Testi8 {
-        fn encode_into(&self) -> u32 {
-            self.0.to_ne_bytes()[0] as u32
+    impl CodeAsWord for Testi8 {
+        fn encode_into(&self) -> Word {
+            self.0.to_ne_bytes()[0] as Word
         }
 
-        fn decode_from(encoded: u32) -> Self {
+        fn decode_from(encoded: Word) -> Self {
             Self(i8::from_ne_bytes([encoded as u8]))
         }
     }
 
     struct Testi32(i32);
-    impl Encodable<u32> for Testi32 {
-        fn encode_into(&self) -> u32 {
-            u32::from_ne_bytes(self.0.to_ne_bytes())
+    impl CodeAsWord for Testi32 {
+        fn encode_into(&self) -> Word {
+            Word::from_ne_bytes(self.0.to_ne_bytes())
         }
 
-        fn decode_from(encoded: u32) -> Self {
+        fn decode_from(encoded: Word) -> Self {
             Self(i32::from_ne_bytes(encoded.to_ne_bytes()))
         }
     }
@@ -113,7 +115,7 @@ mod tests {
     fn encodes_correctly() {
         assert_eq!(
             (1 << 8) | (2 << 16),
-            encode!(u32;
+            encode!(Word;
                 [..8..] = Testu8(0),
                 [..8..] = Testu8(1),
                 [..*] = Testu16(2) // optional
@@ -125,7 +127,7 @@ mod tests {
     fn encodes_signed_correctly() {
         assert_eq!(
             0x000000fe,
-            encode!(u32;
+            encode!(Word;
                 [..8..] = Testi8(-2)
             )
         );
@@ -133,14 +135,14 @@ mod tests {
 
     #[test]
     fn decodes_correctly() {
-        decode!(1; u32;
-            @(a: u32 = [..32..]) => {
+        decode!(1; Word;
+            @(a: Word = [..32..]) => {
                 assert_eq!(1, a);
             }
         );
 
-        decode!((1 << 8) | (2 << 16); u32;
-            @(a: u32 = [..8..], b: u32 = [..8..], c: u32 = [..8..]) => {
+        decode!((1 << 8) | (2 << 16); Word;
+            @(a: u8 = [..8..], b: u8 = [..8..], c: u8 = [..8..]) => {
                 assert_eq!(0, a);
                 assert_eq!(1, b);
                 assert_eq!(2, c);
@@ -150,18 +152,18 @@ mod tests {
 
     #[test]
     fn decodes_signed_correctly() {
-        decode!((1 << 8) | (2 << 16); u32;
-            @(a: Testi32 = [..8..], b: Testi32 = [..8..], c: Testi32 = [..8..]) => {
+        decode!(0xfffffffe; Word;
+            @(a: Testi32 = [..32..]) => {
+                assert_eq!(-2, a.0);
+            }
+        );
+
+        decode!((1 << 8) | (2 << 16); Word;
+            @(a: Testi8 = [..8..], b: Testi8 = [..8..], c: Testi8 = [..8..]) => {
                 assert_eq!(0, a.0);
                 assert_eq!(1, b.0);
                 assert_eq!(2, c.0);
             }
         );
-
-        decode!(0xfffffffe; u32;
-            @(a: Testi32 = [..32..]) => {
-                assert_eq!(-2, a.0);
-            }
-        )
     }
 }

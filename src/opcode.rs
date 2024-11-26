@@ -4,7 +4,7 @@
 use crate::{
     arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS},
     bits,
-    coding::Encodable,
+    coding::CodeAsWord,
     decode, encode
 };
 
@@ -54,7 +54,7 @@ mod encoding {
 //     +---------------------------------------------------------------------------------+
 }
 
-impl Encodable<Word> for RawOpCode {
+impl CodeAsWord for RawOpCode {
     fn encode_into(&self) -> Word {
         *self as Word
     }
@@ -64,7 +64,7 @@ impl Encodable<Word> for RawOpCode {
     }
 }
 
-impl Encodable<Word> for Immediate {
+impl CodeAsWord for Immediate {
     fn encode_into(&self) -> Word {
         *self as Word
     }
@@ -74,7 +74,7 @@ impl Encodable<Word> for Immediate {
     }
 }
 
-impl Encodable<Word> for ExtendedImmediate {
+impl CodeAsWord for ExtendedImmediate {
     fn encode_into(&self) -> Word {
         *self as Word
     }
