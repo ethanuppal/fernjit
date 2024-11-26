@@ -12,8 +12,6 @@ macro_rules! bits {
 
 pub type LocalAddress = u8;
 
-// TODO: can we do anything about calling BITS on u8 instead of LocalAddress?
-// Could be a problem if we ever change LocalAddress to a different type.
 pub const LOCAL_ADDRESS_BITS: usize = LocalAddress::BITS as usize;
 pub const LOCALS_SIZE: usize = 1usize << LOCAL_ADDRESS_BITS;
 pub const CODE_SIZE: usize = 1024;

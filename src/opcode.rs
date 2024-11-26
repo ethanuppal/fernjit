@@ -58,17 +58,29 @@ impl Encodable<Word> for RawOpCode {
     fn encode_into(&self) -> Word {
         *self as Word
     }
+
+    fn decode_from(encoded: Word) -> Self {
+        encoded as RawOpCode
+    }
 }
 
 impl Encodable<Word> for Immediate {
     fn encode_into(&self) -> Word {
         *self as Word
     }
+
+    fn decode_from(encoded: Word) -> Self {
+        encoded as Immediate
+    }
 }
 
 impl Encodable<Word> for ExtendedImmediate {
     fn encode_into(&self) -> Word {
         *self as Word
+    }
+
+    fn decode_from(encoded: Word) -> Self {
+        encoded as ExtendedImmediate
     }
 }
 

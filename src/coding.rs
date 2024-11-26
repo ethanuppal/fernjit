@@ -10,7 +10,6 @@ macro_rules! encode {
             let mut offset = 0;
             let mut result: $T = 0;
             $(
-                // TODO: wrong, transmute might actually fail to compile if $int is bigger that width, which is a scenario we have to allow
                 let encoded_int: $T = $int.encode_into();
                 let mask: $T = (((1 as $T) << $($width)* $($width2)*) - 1) as $T;
                 result |= ((encoded_int & mask) << offset);
@@ -33,8 +32,10 @@ pub trait Encodable<T> {
     /// if fitting a larger type into a smaller slot. For example, if you
     /// try to encode a `0b11110000u8` into a 4-bit slot of a `u32`, and
     /// your `encode_into_op` implementation just uses `as u32`, you'll only
-    /// get `0b0000` encoded.  
+    /// get `0b0000` encoded.
     fn encode_into(&self) -> T;
+
+    fn decode_from(encoded: T) -> Self;
 }
 
 // TODO: idk if decode is as generic as encode... does it work with signed?
@@ -43,19 +44,17 @@ pub trait Encodable<T> {
 macro_rules! decode {
     (
         $encoded:expr; $TEnc:ty;
-        @($($out:ident $(: $T:ty)? =
+        @($($out:ident: $T:ty =
             [..$($width:literal)?$($width2:ident)?..]),*)
         => $block:expr
     ) => {{
         let mut __offset = 0;
-        const TENC_BITS: $TEnc = $crate::bits![$TEnc] as $TEnc;
         $(
-            let paste::paste!([<__width $out>]) =
-                $($width)*$($width2)* as $TEnc;
-            let mask = (((1 as $TEnc) << paste::paste!([<__width $out>])) - 1) as $TEnc;
-            let unsigned_out = (($encoded >> __offset) & mask) as $TEnc;
-            let $out $(: $T)* = (((unsigned_out << (TENC_BITS - paste::paste!([<__width $out>])))) >> (TENC_BITS - paste::paste!([<__width $out>]))).try_into().unwrap();
-            __offset += paste::paste!([<__width $out>]);
+            let op_width = $($width)*$($width2)* as $TEnc;
+            let mask = (1 as $TEnc).checked_shl(op_width).unwrap_or(0).wrapping_sub(1);
+            let unsigned_out = ($encoded >> __offset) & mask;
+            let $out = <$T>::decode_from(unsigned_out);
+            __offset += op_width;
         )*
         $block
     }};
@@ -71,12 +70,42 @@ mod tests {
         fn encode_into(&self) -> u32 {
             self.0 as u32
         }
+
+        fn decode_from(encoded: u32) -> Self {
+            Self(encoded as u8)
+        }
     }
 
     struct Testu16(u16);
     impl Encodable<u32> for Testu16 {
         fn encode_into(&self) -> u32 {
             self.0 as u32
+        }
+
+        fn decode_from(encoded: u32) -> Self {
+            Self(encoded as u16)
+        }
+    }
+
+    struct Testi8(i8);
+    impl Encodable<u32> for Testi8 {
+        fn encode_into(&self) -> u32 {
+            unsafe { std::mem::transmute::<i8, u8>(self.0) as u32 }
+        }
+
+        fn decode_from(encoded: u32) -> Self {
+            Self(unsafe { std::mem::transmute::<u8, i8>(encoded as u8) })
+        }
+    }
+
+    struct Testi32(i32);
+    impl Encodable<u32> for Testi32 {
+        fn encode_into(&self) -> u32 {
+            unsafe { std::mem::transmute::<i32, u32>(self.0) }
+        }
+
+        fn decode_from(encoded: u32) -> Self {
+            Self(unsafe { std::mem::transmute::<u32, i32>(encoded) })
         }
     }
 
@@ -92,14 +121,51 @@ mod tests {
         );
     }
 
+    // #[test]
+    // fn encodes_signed_correctly() {
+    //     unsafe {
+    //         assert_eq!(
+    //             std::mem::transmute::<i32, u32>(-2),
+    //             encode!(u32;
+    //                 [..8..] = Testi8(-2)
+    //             )
+    //         );
+    //     }
+    // }
+
     #[test]
     fn decodes_correctly() {
+        decode!(1; u32;
+            @(a: u32 = [..32..]) => {
+                assert_eq!(1, a);
+            }
+        );
+
         decode!((1 << 8) | (2 << 16); u32;
-            @(a: u32 = [..8..], b = [..8..], c = [..8..]) => {
+            @(a: u32 = [..8..], b: u32 = [..8..], c: u32 = [..8..]) => {
                 assert_eq!(0, a);
                 assert_eq!(1, b);
                 assert_eq!(2, c);
             }
         );
+    }
+
+    #[test]
+    fn decodes_signed_correctly() {
+        decode!((1 << 8) | (2 << 16); u32;
+            @(a: Testi32 = [..8..], b: Testi32 = [..8..], c: Testi32 = [..8..]) => {
+                assert_eq!(0, a.0);
+                assert_eq!(1, b.0);
+                assert_eq!(2, c.0);
+            }
+        );
+
+        unsafe {
+            decode!(std::mem::transmute::<i32, u32>(-2); u32;
+                @(a: Testi32 = [..32..]) => {
+                    assert_eq!(-2, a.0);
+                }
+            )
+        }
     }
 }
