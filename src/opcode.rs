@@ -1,9 +1,7 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
-// TODO: casting to signed probably doesn't work
 use crate::{
     arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS},
-    bits,
     coding::CodeAsWord,
     decode, encode
 };
@@ -38,6 +36,12 @@ mod encoding {
     use super::*;
     use static_assertions::{const_assert, const_assert_eq};
 
+    macro_rules! bits {
+        ($T:ty) => {
+            (8 * std::mem::size_of::<$T>())
+        };
+    }
+
 //     +---------------------------------------------------------------------------------+
 //     | Encodings (inspired by Lua). Ops fit in one `Word`.                             |
 //     +---------------------------------------------------------------------------------+
@@ -45,7 +49,7 @@ mod encoding {
          const_assert_eq!(bits![Word], OP_CODE_BITS + 3 * LOCAL_ADDRESS_BITS);
 //     | AB (2 addresses):                                                               | 
          const_assert!(OP_CODE_BITS + 2 * LOCAL_ADDRESS_BITS <= bits![Word]);
-//     | AI (address+ immediate)                                                         | 
+//     | AI (address + immediate)                                                        | 
          const_assert_eq!(bits![Word], OP_CODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS);
 //     | IX (extended immediate)                                                         | 
          const_assert_eq!(bits![Word], OP_CODE_BITS + IMM_EXT_BITS);
@@ -55,31 +59,31 @@ mod encoding {
 }
 
 impl CodeAsWord for RawOpCode {
-    fn encode_into(&self) -> Word {
+    fn encode_as_word(&self) -> Word {
         *self as Word
     }
 
-    fn decode_from(encoded: Word) -> Self {
+    fn decode_from_word(encoded: Word) -> Self {
         encoded as RawOpCode
     }
 }
 
 impl CodeAsWord for Immediate {
-    fn encode_into(&self) -> Word {
+    fn encode_as_word(&self) -> Word {
         *self as Word
     }
 
-    fn decode_from(encoded: Word) -> Self {
+    fn decode_from_word(encoded: Word) -> Self {
         encoded as Immediate
     }
 }
 
 impl CodeAsWord for ExtendedImmediate {
-    fn encode_into(&self) -> Word {
+    fn encode_as_word(&self) -> Word {
         *self as Word
     }
 
-    fn decode_from(encoded: Word) -> Self {
+    fn decode_from_word(encoded: Word) -> Self {
         encoded as ExtendedImmediate
     }
 }
@@ -118,6 +122,14 @@ macro_rules! encode_opcode {
             [..OP_CODE_BITS..] = $self.opcode()
         ));
     };
+    ($self:expr; $opname:ident as Ix) => {
+        if let Self::$opname(i) = $self {
+            return Some(encode!(Word;
+                [..OP_CODE_BITS..] = $self.opcode(),
+                [..IMM_EXT_BITS..] = *i
+            ));
+        }
+    };
 }
 
 macro_rules! decoded_opcode {
@@ -154,6 +166,14 @@ macro_rules! decoded_opcode {
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..]
             ) => Self::$opname()
+        )
+    };
+    ($encoded:expr; $opname:ident as Ix) => {
+        decode!($encoded; $crate::arch::Word;
+            @(
+                _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
+                i: $crate::opcode::ExtendedImmediate = [..IMM_EXT_BITS..]
+            ) => Self::$opname(i)
         )
     };
 }
@@ -242,7 +262,8 @@ opcodes! {
         Mov(LocalAddress, LocalAddress) encode AB,
         MovI(LocalAddress, Immediate) encode AI,
         Add(LocalAddress, LocalAddress, LocalAddress) encode ABC,
-        Ret() encode N,  // TODO: avoid parens here?
+        Call(ExtendedImmediate) encode Ix,
+        Ret() encode N,
     }
 }
 

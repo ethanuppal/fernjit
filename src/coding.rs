@@ -12,13 +12,13 @@ macro_rules! encode {
             let mut offset = 0;
             let mut result: $T = 0;
             $(
-                let encoded_int: $T = $int.encode_into();
+                let encoded_int: $T = $int.encode_as_word();
                 let mask: $T = (((1 as $T) << $($width)* $($width2)*) - 1) as $T;
                 result |= ((encoded_int & mask) << offset);
                 offset += $($width)* $($width2)*;
             )*
             $(
-                let encoded_final: $T = $final.encode_into();
+                let encoded_final: $T = $final.encode_as_word();
                 let mask: $T = ((1 << offset) - 1) as $T;
                 result |= ((encoded_final & mask) << offset);
             )*
@@ -30,17 +30,18 @@ macro_rules! encode {
 
 /// Traits for types that can be encoded as part of an Op
 pub trait CodeAsWord {
-    /// Encodes `self` into a larger sequence. Higher bits will be chopped off
+    /// Encodes `self` into a `Word`. Higher bits will be chopped off
     /// if fitting a larger type into a smaller slot. For example, if you
-    /// try to encode a `0b11110000u8` into a 4-bit slot of a `u32`, and
-    /// your `encode_into_op` implementation just uses `as u32`, you'll only
+    /// try to encode a `0b11110000u8` into a 4-bit slot of a `Word`, and
+    /// your `encode_into` implementation just uses `as Word`, you'll only
     /// get `0b0000` encoded.
-    fn encode_into(&self) -> Word;
+    fn encode_as_word(&self) -> Word;
 
-    fn decode_from(encoded: Word) -> Self;
+    // Decodes `self` from a `Word`. If `Self` is `n` bits, then the least
+    // siginificant `n` bits of `encoded` contain the data to decode.
+    fn decode_from_word(encoded: Word) -> Self;
 }
 
-// TODO: idk if decode is as generic as encode... does it work with signed?
 /// Deconstructs a bitset of a given type into bitfields of given types.
 #[macro_export] // for doctest
 macro_rules! decode {
@@ -55,7 +56,7 @@ macro_rules! decode {
             let op_width = $($width)*$($width2)* as $TEnc;
             let mask = (1 as $TEnc).checked_shl(op_width).unwrap_or(0).wrapping_sub(1);
             let unsigned_out = ($encoded >> __offset) & mask;
-            let $out = <$T>::decode_from(unsigned_out);
+            let $out = <$T>::decode_from_word(unsigned_out);
             __offset += op_width;
         )*
         $block
@@ -69,44 +70,44 @@ mod tests {
     // so we don't conflict with regular u8 impl
     struct Testu8(u8);
     impl CodeAsWord for Testu8 {
-        fn encode_into(&self) -> Word {
+        fn encode_as_word(&self) -> Word {
             self.0 as Word
         }
 
-        fn decode_from(encoded: Word) -> Self {
+        fn decode_from_word(encoded: Word) -> Self {
             Self(encoded as u8)
         }
     }
 
     struct Testu16(u16);
     impl CodeAsWord for Testu16 {
-        fn encode_into(&self) -> Word {
+        fn encode_as_word(&self) -> Word {
             self.0 as Word
         }
 
-        fn decode_from(encoded: Word) -> Self {
+        fn decode_from_word(encoded: Word) -> Self {
             Self(encoded as u16)
         }
     }
 
     struct Testi8(i8);
     impl CodeAsWord for Testi8 {
-        fn encode_into(&self) -> Word {
+        fn encode_as_word(&self) -> Word {
             self.0.to_ne_bytes()[0] as Word
         }
 
-        fn decode_from(encoded: Word) -> Self {
+        fn decode_from_word(encoded: Word) -> Self {
             Self(i8::from_ne_bytes([encoded as u8]))
         }
     }
 
     struct Testi32(i32);
     impl CodeAsWord for Testi32 {
-        fn encode_into(&self) -> Word {
+        fn encode_as_word(&self) -> Word {
             Word::from_ne_bytes(self.0.to_ne_bytes())
         }
 
-        fn decode_from(encoded: Word) -> Self {
+        fn decode_from_word(encoded: Word) -> Self {
             Self(i32::from_ne_bytes(encoded.to_ne_bytes()))
         }
     }
