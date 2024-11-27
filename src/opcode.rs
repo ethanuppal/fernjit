@@ -122,9 +122,9 @@ macro_rules! encode_opcode {
 
 macro_rules! decoded_opcode {
     ($encoded:expr; $opname:ident as ABC) => {
-        decode!($encoded; Word;
+        decode!($encoded; $crate::arch::Word;
             @(
-                _op: RawOpCode = [..OP_CODE_BITS..],
+                _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
                 b: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
                 c: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..]
@@ -132,9 +132,9 @@ macro_rules! decoded_opcode {
         )
     };
     ($encoded:expr; $opname:ident as AB) => {
-        decode!($encoded; Word;
+        decode!($encoded; $crate::arch::Word;
             @(
-                _op: RawOpCode = [..OP_CODE_BITS..],
+                _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
                 b: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..]
             ) => Self::$opname(a, b)
@@ -143,16 +143,16 @@ macro_rules! decoded_opcode {
     ($encoded:expr; $opname:ident as AI) => {
         decode!($encoded; Word;
             @(
-                _op: RawOpCode = [..OP_CODE_BITS..],
+                _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
-                i: Immediate = [..IMM_BITS..]
+                i: $crate::opcode::Immediate = [..IMM_BITS..]
             ) => Self::$opname(a, i)
         )
     };
     ($encoded:expr; $opname:ident as N) => {
-        decode!($encoded; Word;
+        decode!($encoded; $crate::arch::Word;
             @(
-                _op: RawOpCode = [..OP_CODE_BITS..]
+                _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..]
             ) => Self::$opname()
         )
     };
@@ -161,7 +161,7 @@ macro_rules! decoded_opcode {
 macro_rules! implement_opcodes {
     ($T:ty; $($opname:ident as $encoding:ident),*) => {
         impl $T {
-            pub fn opcode(&self) -> RawOpCode {
+            pub fn opcode(&self) -> $crate::opcode::RawOpCode {
                 let discr = 0;
                 $(
                     if let Self::$opname(..) = self {
@@ -173,25 +173,25 @@ macro_rules! implement_opcodes {
                 unreachable!()
             }
 
-            pub fn encode_packed(&self) -> Option<Word> {
+            pub fn encode_packed(&self) -> std::option::Option<$crate::opcode::Word> {
                 $(
                     encode_opcode!(self; $opname as $encoding);
                 )*
             }
 
-            pub fn decode_packed(encoded: Word) -> Option<$T> {
+            pub fn decode_packed(encoded: $crate::opcode::Word) -> std::option::Option<$T> {
                 let opcode = encoded & ((1 << OP_CODE_BITS) - 1);
                 let discr = 0;
                 $(
                     if opcode == discr {
-                        return Some(
+                        return std::option::Option::Some(
                             decoded_opcode!(encoded; $opname as $encoding)
                         );
                     }
                     let discr = discr + 1;
                 )*
                 let _ = discr; // #[allow(unused)] the last usage
-                None
+                std::option::Option::None
             }
         }
     };
