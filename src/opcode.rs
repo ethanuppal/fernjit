@@ -91,7 +91,7 @@ impl CodeAsWord for ExtendedImmediate {
 macro_rules! encode_opcode {
     ($self:expr; $opname:ident as ABC) => {
         if let Self::$opname(a, b, c) = $self {
-            return Some(encode!(Word;
+            return Some(encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..LOCAL_ADDRESS_BITS..] = *a,
                 [..LOCAL_ADDRESS_BITS..] = *b,
@@ -101,7 +101,7 @@ macro_rules! encode_opcode {
     };
     ($self:expr; $opname:ident as AB) => {
         if let Self::$opname(a, b) = $self {
-            return Some(encode!(Word;
+            return Some(encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..LOCAL_ADDRESS_BITS..] = *a,
                 [..LOCAL_ADDRESS_BITS..] = *b
@@ -110,7 +110,7 @@ macro_rules! encode_opcode {
     };
     ($self:expr; $opname:ident as AI) => {
         if let Self::$opname(a, i) = $self {
-            return Some(encode!(Word;
+            return Some(encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..LOCAL_ADDRESS_BITS..] = *a,
                 [..IMM_BITS..] = *i
@@ -118,13 +118,13 @@ macro_rules! encode_opcode {
         }
     };
     ($self:expr; $opname:ident as N) => {
-        return Some(encode!(Word;
+        return Some(encode!($crate::arch::Word;
             [..OP_CODE_BITS..] = $self.opcode()
         ));
     };
     ($self:expr; $opname:ident as Ix) => {
         if let Self::$opname(i) = $self {
-            return Some(encode!(Word;
+            return Some(encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..IMM_EXT_BITS..] = *i
             ));
@@ -153,7 +153,7 @@ macro_rules! decoded_opcode {
         )
     };
     ($encoded:expr; $opname:ident as AI) => {
-        decode!($encoded; Word;
+        decode!($encoded; $crate::arch::Word;
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
