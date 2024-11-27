@@ -9,13 +9,14 @@ use crate::{
 
 struct StackFrame {
     locals: [Word; LOCALS_SIZE],
-    ip: usize
+    return_address: usize
 }
 
 pub struct VM {
     code: Box<[Word]>,
     code_length: usize,
-    call_stack: Vec<StackFrame>
+    call_stack: Vec<StackFrame>,
+    ip: usize
 }
 
 #[derive(Debug)]
@@ -25,6 +26,8 @@ pub enum VMError {
     CodeOversized,
     InvalidIP
 }
+
+pub type VMResult = Result<(), VMError>;
 
 impl From<OpCodingError> for VMError {
     fn from(value: OpCodingError) -> Self {
@@ -40,15 +43,14 @@ impl Default for VM {
         Self {
             code: vec![0; CODE_SIZE].into_boxed_slice(),
             code_length: 0,
-            call_stack: vec![]
+            call_stack: vec![],
+            ip: 0
         }
     }
 }
 
 impl VM {
-    pub fn load<O: EncodeIntoOpStream>(
-        &mut self, program: &[O]
-    ) -> Result<(), VMError> {
+    pub fn load<O: EncodeIntoOpStream>(&mut self, program: &[O]) -> VMResult {
         let mut pos = 0;
         for op in program {
             op.encode_into(self.code.as_mut(), &mut pos)?;
@@ -57,12 +59,12 @@ impl VM {
         self.call_stack.clear();
         self.call_stack.push(StackFrame {
             locals: [0; LOCALS_SIZE],
-            ip: 0
+            return_address: 0  // we will never return to this address, as if the first frame is popped, the VM will stop
         });
         Ok(())
     }
 
-    pub fn run(&mut self) -> Result<(), VMError> {
+    pub fn run(&mut self) -> VMResult {
         while !self.call_stack.is_empty() {
             self.step()?;
         }
@@ -71,82 +73,73 @@ impl VM {
 
     fn next(&self) -> (Op, usize) {
         unsafe {
-            Op::decode_from(self.code.as_ref(), self.ip()).unwrap_unchecked()
+            Op::decode_from(self.code.as_ref(), self.ip).unwrap_unchecked()
         }
     }
 
     fn next_validate(&self) -> Result<(Op, usize), VMError> {
-        let (op, length) = Op::decode_from(self.code.as_ref(), self.ip())?;
+        let (op, length) = Op::decode_from(self.code.as_ref(), self.ip)?;
         Ok((op, length))
     }
 
-    fn step(&mut self) -> Result<(), VMError> {
+    fn step(&mut self) -> VMResult {
         let (op, length) = if cfg!(feature = "validate") {
             self.next_validate()?
         } else {
             self.next()
         };
 
-        let ip = self.ip();
-
-        // TODO: I don't like doing move_ip everywhere, but there are some
-        // places where we don't want to. What to do here?
         match op {
             Op::Mov(to, from) => {
                 self.write_local(to, self.read_local(from));
-                self.move_ip(ip + length)
+                self.move_ip(self.ip + length)
             }
             Op::MovI(to, constant) => {
                 self.write_local(to, constant);
-                self.move_ip(ip + length)
+                self.move_ip(self.ip + length)
             }
             Op::Add(to, first, second) => {
-                self.write_local(
-                    to,
-                    self.read_local(first) + self.read_local(second)
-                );
-                self.move_ip(ip + length)
+                let sum = self.read_local(first) + self.read_local(second);
+                self.write_local(to, sum);
+                self.move_ip(self.ip + length)
             }
             Op::Ret() => {
+                let ra = self.current_frame().return_address;
                 self.call_stack.pop();
-                Ok(())
+                self.move_ip(ra)
             }
         }?;
 
         Ok(())
     }
 
-    fn ip(&self) -> usize {
-        self.top_frame().ip
-    }
-
-    fn move_ip(&mut self, new_ip: usize) -> Result<(), VMError> {
+    fn move_ip(&mut self, new_ip: usize) -> VMResult {
         if new_ip >= self.code_length {
             return Err(VMError::InvalidIP);
         };
 
-        self.top_frame_mut().ip = new_ip;
+        self.ip = new_ip;
 
         Ok(())
     }
 
     fn read_local(&self, address: LocalAddress) -> Word {
-        self.top_frame().locals[address as usize]
+        self.current_frame().locals[address as usize]
     }
 
     fn write_local(
         &mut self, address: LocalAddress, value: impl Into<Word>
     ) -> () {
-        self.top_frame_mut().locals[address as usize] = value.into()
+        self.current_frame_mut().locals[address as usize] = value.into()
     }
 
-    fn top_frame(&self) -> &StackFrame {
+    fn current_frame(&self) -> &StackFrame {
         self.call_stack.last().expect(
             "call stack expected to always have one frame while running."
         )
     }
 
-    fn top_frame_mut(&mut self) -> &mut StackFrame {
+    fn current_frame_mut(&mut self) -> &mut StackFrame {
         self.call_stack.last_mut().expect(
             "call stack expected to always have one frame while running."
         )
@@ -168,9 +161,9 @@ mod tests {
             vm.step().expect("failed to run program");
         }
 
-        assert_eq!(1, vm.top_frame().locals[0]);
-        assert_eq!(2, vm.top_frame().locals[1]);
-        assert_eq!(3, vm.top_frame().locals[2]);
+        assert_eq!(1, vm.current_frame().locals[0]);
+        assert_eq!(2, vm.current_frame().locals[1]);
+        assert_eq!(3, vm.current_frame().locals[2]);
 
         vm.run().expect("failed to run program");
     }
