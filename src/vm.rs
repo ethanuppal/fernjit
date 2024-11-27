@@ -113,16 +113,14 @@ impl VM {
                 let frame = self.current_frame();
                 let ra = frame.return_address;
 
-                // TODO: I haven't found a way to explain to the borrow checker
-                // that it can copy straight from the top frame, so if you know
-                // how to do this please let me know. I'm guessing this will get
-                // optimizied anyways but it's annoying.
-                let returns = frame.locals[RETURN_LOCALS].to_vec();
-                if let Some(prev_frame) = self.previous_frame_mut() {
-                    prev_frame.locals[RETURN_LOCALS].copy_from_slice(&returns);
+                let popped = self.call_stack.pop().expect(
+                    "call stack expected to always have one frame while running."
+                );
+                if let Some(frame_below) = self.call_stack.last_mut() {
+                    frame_below.locals[RETURN_LOCALS]
+                        .copy_from_slice(&popped.locals[RETURN_LOCALS]);
                 }
 
-                self.call_stack.pop();
                 self.jump(ra)
             }
             Op::Call(offset) => {
@@ -132,17 +130,15 @@ impl VM {
                 let extended = sign_extend_to::<usize>(as_usize, IMM_EXT_BITS);
                 let new_ip = self.ip.wrapping_add(extended); // handle negative offsets
 
-                // TODO: same as above
-                let args =
-                    self.current_frame().locals[ARGUMENT_LOCALS].to_vec();
-
-                self.call_stack.push(StackFrame {
+                let mut new_frame = StackFrame {
                     locals: [0; LOCALS_SIZE],
                     return_address: self.ip + length
-                });
+                };
+                new_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
+                    &self.current_frame().locals[ARGUMENT_LOCALS]
+                );
 
-                self.current_frame_mut().locals[ARGUMENT_LOCALS]
-                    .copy_from_slice(&args);
+                self.call_stack.push(new_frame);
 
                 self.jump(new_ip)
             }
@@ -179,15 +175,6 @@ impl VM {
         self.call_stack.last_mut().expect(
             "call stack expected to always have one frame while running."
         )
-    }
-
-    fn previous_frame_mut(&mut self) -> Option<&mut StackFrame> {
-        if self.call_stack.len() < 2 {
-            return None;
-        }
-
-        let i = self.call_stack.len() - 2;
-        self.call_stack.get_mut(i)
     }
 }
 
