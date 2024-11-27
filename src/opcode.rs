@@ -18,7 +18,7 @@ pub type Immediate = u16;
 pub type ExtendedImmediate = u32;
 
 /// Bits for opcode.
-pub const OP_CODE_BITS: usize = 8; // not using ::BITS here because types are just smallest thing that can fit,
+pub const OP_CODE_BITS: usize = 8; // not using `::BITS` here because types are just smallest thing that can fit,
                                    // this is actual number of bits, which may be less.
 /// Bits for immediate value.
 pub const IMM_BITS: usize = 16;

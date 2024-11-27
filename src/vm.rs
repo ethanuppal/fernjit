@@ -92,28 +92,28 @@ impl VM {
         match op {
             Op::Mov(to, from) => {
                 self.write_local(to, self.read_local(from));
-                self.move_ip(self.ip + length)
+                self.jump(self.ip + length)
             }
             Op::MovI(to, constant) => {
                 self.write_local(to, constant);
-                self.move_ip(self.ip + length)
+                self.jump(self.ip + length)
             }
             Op::Add(to, first, second) => {
                 let sum = self.read_local(first) + self.read_local(second);
                 self.write_local(to, sum);
-                self.move_ip(self.ip + length)
+                self.jump(self.ip + length)
             }
             Op::Ret() => {
                 let ra = self.current_frame().return_address;
                 self.call_stack.pop();
-                self.move_ip(ra)
+                self.jump(ra)
             }
         }?;
 
         Ok(())
     }
 
-    fn move_ip(&mut self, new_ip: usize) -> VMResult {
+    fn jump(&mut self, new_ip: usize) -> VMResult {
         if new_ip >= self.code_length {
             return Err(VMError::InvalidIP);
         };
