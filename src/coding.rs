@@ -1,7 +1,7 @@
 use crate::arch::Word;
 
 /// Iteratively constructs a bitset of a given type from bit fields.
-#[macro_export] // for doctest
+#[macro_export]
 macro_rules! encode {
     (
         $T:ty;
@@ -28,7 +28,7 @@ macro_rules! encode {
     };
 }
 
-/// Traits for types that can be encoded as part of an Op
+/// Traits for types that can be encoded as part of an [Op].
 pub trait CodeAsWord {
     /// Encodes `self` into a `Word`. Higher bits will be chopped off
     /// if fitting a larger type into a smaller slot. For example, if you
@@ -43,7 +43,7 @@ pub trait CodeAsWord {
 }
 
 /// Deconstructs a bitset of a given type into bitfields of given types.
-#[macro_export] // for doctest
+#[macro_export]
 macro_rules! decode {
     (
         $encoded:expr; $TEnc:ty;

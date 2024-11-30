@@ -1,4 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
+
 use core::ops::Range;
 
 pub type Word = u32;

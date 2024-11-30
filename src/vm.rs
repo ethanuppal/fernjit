@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn call_neg_offset() {
         let mut vm = VM::default();
-        vm.load(&[
+        let program = [
             // func main
             Op::MovI(0, 3),
             Op::Call(4), // call double
@@ -255,8 +255,9 @@ mod tests {
             Op::Mov(1, 0),
             Op::Call((0 as ExtendedImmediate).wrapping_sub(3)), // call add
             Op::Ret()
-        ])
-        .expect("invalid program");
+        ];
+
+        vm.load(&program).expect("invalid program");
 
         for _ in 0..7 {
             vm.step().expect("failed to run program");

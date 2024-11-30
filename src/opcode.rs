@@ -2,8 +2,7 @@
 
 use crate::{
     arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS},
-    coding::CodeAsWord,
-    decode, encode
+    coding::CodeAsWord
 };
 
 /// Smallest sized integer type that can fit an op code.
@@ -91,7 +90,7 @@ impl CodeAsWord for ExtendedImmediate {
 macro_rules! encode_opcode {
     ($self:expr; $opname:ident as ABC) => {
         if let Self::$opname(a, b, c) = $self {
-            return Some(encode!($crate::arch::Word;
+            return Some($crate::encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..LOCAL_ADDRESS_BITS..] = *a,
                 [..LOCAL_ADDRESS_BITS..] = *b,
@@ -101,7 +100,7 @@ macro_rules! encode_opcode {
     };
     ($self:expr; $opname:ident as AB) => {
         if let Self::$opname(a, b) = $self {
-            return Some(encode!($crate::arch::Word;
+            return Some($crate::encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..LOCAL_ADDRESS_BITS..] = *a,
                 [..LOCAL_ADDRESS_BITS..] = *b
@@ -110,7 +109,7 @@ macro_rules! encode_opcode {
     };
     ($self:expr; $opname:ident as AI) => {
         if let Self::$opname(a, i) = $self {
-            return Some(encode!($crate::arch::Word;
+            return Some(crate::encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..LOCAL_ADDRESS_BITS..] = *a,
                 [..IMM_BITS..] = *i
@@ -118,13 +117,13 @@ macro_rules! encode_opcode {
         }
     };
     ($self:expr; $opname:ident as N) => {
-        return Some(encode!($crate::arch::Word;
+        return Some(crate::encode!($crate::arch::Word;
             [..OP_CODE_BITS..] = $self.opcode()
         ));
     };
     ($self:expr; $opname:ident as Ix) => {
         if let Self::$opname(i) = $self {
-            return Some(encode!($crate::arch::Word;
+            return Some(crate::encode!($crate::arch::Word;
                 [..OP_CODE_BITS..] = $self.opcode(),
                 [..IMM_EXT_BITS..] = *i
             ));
@@ -134,7 +133,7 @@ macro_rules! encode_opcode {
 
 macro_rules! decoded_opcode {
     ($encoded:expr; $opname:ident as ABC) => {
-        decode!($encoded; $crate::arch::Word;
+        crate::decode!($encoded; $crate::arch::Word;
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
@@ -144,7 +143,7 @@ macro_rules! decoded_opcode {
         )
     };
     ($encoded:expr; $opname:ident as AB) => {
-        decode!($encoded; $crate::arch::Word;
+        crate::decode!($encoded; $crate::arch::Word;
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
@@ -153,7 +152,7 @@ macro_rules! decoded_opcode {
         )
     };
     ($encoded:expr; $opname:ident as AI) => {
-        decode!($encoded; $crate::arch::Word;
+        crate::decode!($encoded; $crate::arch::Word;
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 a: $crate::arch::LocalAddress = [..LOCAL_ADDRESS_BITS..],
@@ -162,14 +161,14 @@ macro_rules! decoded_opcode {
         )
     };
     ($encoded:expr; $opname:ident as N) => {
-        decode!($encoded; $crate::arch::Word;
+        crate::decode!($encoded; $crate::arch::Word;
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..]
             ) => Self::$opname()
         )
     };
     ($encoded:expr; $opname:ident as Ix) => {
-        decode!($encoded; $crate::arch::Word;
+        crate::decode!($encoded; $crate::arch::Word;
             @(
                 _op: $crate::opcode::RawOpCode = [..OP_CODE_BITS..],
                 i: $crate::opcode::ExtendedImmediate = [..IMM_EXT_BITS..]
