@@ -2,8 +2,6 @@
 
 use std::vec;
 
-use num_traits::{PrimInt, Unsigned};
-
 use crate::{
     arch::{
         InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS, CODE_SIZE,
@@ -11,6 +9,19 @@ use crate::{
     },
     opcode::{EncodeIntoOpStream, Op, OpCodingError, IMM_BITS, IMM_EXT_BITS}
 };
+
+macro_rules! sign_extend_to {
+    ($t:ty, $value:expr, $bits:expr) => {{
+        let value = $value as $t;
+        let sign_bit = 1 << ($bits - 1);
+        if value & sign_bit != 0 {
+            let extension = !((1 << $bits) - 1);
+            value | extension
+        } else {
+            value
+        }
+    }};
+}
 
 struct StackFrame {
     locals: [Word; LOCALS_SIZE],
@@ -100,7 +111,7 @@ impl VM {
                 self.jump(self.ip + length)
             }
             Op::MovI(to, constant) => {
-                let extended = sign_extend_to::<Word>(constant, IMM_BITS);
+                let extended = sign_extend_to!(Word, constant, IMM_BITS);
                 self.write_local(to, extended);
                 self.jump(self.ip + length)
             }
@@ -127,7 +138,8 @@ impl VM {
                 let as_usize: usize = offset
                     .try_into()
                     .expect("illegal offset, too large for platform"); // explodes on microcontrollers
-                let extended = sign_extend_to::<usize>(as_usize, IMM_EXT_BITS);
+                let extended =
+                    sign_extend_to!(InstructionAddress, as_usize, IMM_EXT_BITS);
                 let new_ip = self.ip.wrapping_add(extended); // handle negative offsets
 
                 let mut new_frame = StackFrame {
@@ -175,19 +187,6 @@ impl VM {
         self.call_stack.last_mut().expect(
             "call stack expected to always have one frame while running."
         )
-    }
-}
-
-fn sign_extend_to<T: Unsigned + PrimInt>(
-    value: impl Into<T>, bits: usize
-) -> T {
-    let value = value.into();
-    let sign_bit = T::one() << (bits - 1);
-    if value & sign_bit != T::zero() {
-        let extension = !((T::one() << bits) - T::one());
-        value | extension
-    } else {
-        value
     }
 }
 
