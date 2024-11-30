@@ -1,19 +1,14 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
-pub type Word = u64;
-pub type SignedWord = i64;
+use core::ops::Range;
 
-/// Usage: `bits![T]`.
-#[macro_export]
-macro_rules! bits {
-    ($T:ty) => {
-        (8 * std::mem::size_of::<$T>())
-    };
-}
+pub type Word = u32;
+pub type InstructionAddress = usize; // TODO: better name?
+pub type LocalAddress = u8;
 
-pub type Address = Word;
-pub type Offset = SignedWord;
-
-pub const ADDRESS_BITS: usize = 19;
-pub const STACK_SIZE: usize = 1usize << ADDRESS_BITS;
+pub const LOCAL_ADDRESS_BITS: usize = LocalAddress::BITS as usize;
+pub const LOCALS_SIZE: usize = 1usize << LOCAL_ADDRESS_BITS;
 pub const CODE_SIZE: usize = 1024;
+
+pub const ARGUMENT_LOCALS: Range<usize> = 0..8;
+pub const RETURN_LOCALS: Range<usize> = 0..2;
