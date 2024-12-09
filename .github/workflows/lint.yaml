@@ -1,4 +1,4 @@
-name: CI
+name: Code Style
 
 on:
   pull_request:
@@ -10,11 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_and_test:
-    strategy:
-      matrix:
-        os: [macos-15, macos-14, macos-13, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+  lint:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Rust Caching
