@@ -1,3 +1,5 @@
+// Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
+
 use crate::arch::Word;
 
 /// Iteratively constructs a bitset of a given type from bit fields.

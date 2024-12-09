@@ -1,0 +1,12 @@
+[package]
+name = "fern"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[features]
+validate = []
+
+[dependencies]
+paste.workspace = true
+static_assertions.workspace = true

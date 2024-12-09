@@ -75,7 +75,7 @@ impl VM {
         self.call_stack.clear();
         self.call_stack.push(StackFrame {
             locals: [0; LOCALS_SIZE],
-            return_address: 0  // we will never return to this address, as if the first frame is popped, the VM will stop
+            return_address: 0, // we will never return to this address, as if the first frame is popped, the VM will stop
         });
         Ok(())
     }
