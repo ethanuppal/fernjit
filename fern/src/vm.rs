@@ -5,9 +5,9 @@ use std::vec;
 use crate::{
     arch::{
         InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS, CODE_SIZE,
-        LOCALS_SIZE, RETURN_LOCALS
+        LOCALS_SIZE, RETURN_LOCALS,
     },
-    opcode::{EncodeIntoOpStream, Op, OpCodingError, IMM_BITS, IMM_EXT_BITS}
+    opcode::{EncodeIntoOpStream, Op, OpCodingError, IMM_BITS, IMM_EXT_BITS},
 };
 
 macro_rules! sign_extend_to {
@@ -25,14 +25,14 @@ macro_rules! sign_extend_to {
 
 struct StackFrame {
     locals: [Word; LOCALS_SIZE],
-    return_address: InstructionAddress
+    return_address: InstructionAddress,
 }
 
 pub struct VM {
     code: Box<[Word]>,
     code_length: InstructionAddress,
     call_stack: Vec<StackFrame>,
-    ip: InstructionAddress
+    ip: InstructionAddress,
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ pub enum VMError {
     InvalidOp,
     InvalidArgs,
     CodeOversized,
-    InvalidIP
+    InvalidIP,
 }
 
 pub type VMResult = Result<(), VMError>;
@@ -49,7 +49,7 @@ impl From<OpCodingError> for VMError {
     fn from(value: OpCodingError) -> Self {
         match value {
             OpCodingError::NoSpace => VMError::CodeOversized,
-            OpCodingError::Other => VMError::InvalidOp
+            OpCodingError::Other => VMError::InvalidOp,
         }
     }
 }
@@ -60,7 +60,7 @@ impl Default for VM {
             code: vec![0; CODE_SIZE].into_boxed_slice(),
             code_length: 0,
             call_stack: vec![],
-            ip: 0
+            ip: 0,
         }
     }
 }
@@ -75,9 +75,9 @@ impl VM {
         self.call_stack.clear();
         self.call_stack.push(StackFrame {
             locals: [0; LOCALS_SIZE],
-            return_address: 0 /* once the initial frame is popped, execution
-                               * stops, so it doesn't  matter what address we
-                               * have here */
+            return_address: 0, /* once the initial frame is popped, execution
+                                * stops, so it doesn't  matter what address
+                                * we have here */
         });
         Ok(())
     }
@@ -146,10 +146,10 @@ impl VM {
 
                 let mut new_frame = StackFrame {
                     locals: [0; LOCALS_SIZE],
-                    return_address: self.ip + length
+                    return_address: self.ip + length,
                 };
                 new_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
-                    &self.current_frame().locals[ARGUMENT_LOCALS]
+                    &self.current_frame().locals[ARGUMENT_LOCALS],
                 );
 
                 self.call_stack.push(new_frame);
@@ -181,13 +181,13 @@ impl VM {
 
     fn current_frame(&self) -> &StackFrame {
         self.call_stack.last().expect(
-            "call stack expected to always have one frame while running."
+            "call stack expected to always have one frame while running.",
         )
     }
 
     fn current_frame_mut(&mut self) -> &mut StackFrame {
         self.call_stack.last_mut().expect(
-            "call stack expected to always have one frame while running."
+            "call stack expected to always have one frame while running.",
         )
     }
 }
@@ -226,7 +226,7 @@ mod tests {
             Op::Ret(),
             // func add
             Op::Add(0, 0, 1),
-            Op::Ret()
+            Op::Ret(),
         ])
         .expect("invalid program");
 
@@ -255,7 +255,7 @@ mod tests {
             // func double
             Op::Mov(1, 0),
             Op::Call((0 as ExtendedImmediate).wrapping_sub(3)), // call add
-            Op::Ret()
+            Op::Ret(),
         ];
 
         vm.load(&program).expect("invalid program");

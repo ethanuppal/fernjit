@@ -2,7 +2,7 @@
 
 use crate::{
     arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS},
-    coding::CodeAsWord
+    coding::CodeAsWord,
 };
 
 /// Smallest sized integer type that can fit an op code.
@@ -268,14 +268,14 @@ opcodes! {
 
 pub enum OpCodingError {
     NoSpace,
-    Other
+    Other,
 }
 
 pub trait EncodeIntoOpStream {
     /// Encodes a representation of an operation into a `stream` at the given
     /// `index`.
     fn encode_into(
-        &self, stream: &mut [Word], index: &mut usize
+        &self, stream: &mut [Word], index: &mut usize,
     ) -> Result<(), OpCodingError>;
 }
 
@@ -284,11 +284,11 @@ impl Op {
     /// the `Op` and the length used from the stream, in the case of
     /// multi-word encoding.
     pub fn decode_from(
-        stream: &[Word], index: usize
+        stream: &[Word], index: usize,
     ) -> Result<(Op, usize), OpCodingError> {
         Ok((
             Self::decode_packed(stream[index]).ok_or(OpCodingError::Other)?,
-            1
+            1,
         ))
     }
 }
@@ -296,7 +296,7 @@ impl Op {
 // so I can easily switch between packed and VL encoding
 impl EncodeIntoOpStream for Op {
     fn encode_into(
-        &self, stream: &mut [Word], index: &mut usize
+        &self, stream: &mut [Word], index: &mut usize,
     ) -> Result<(), OpCodingError> {
         if *index >= stream.len() {
             return Err(OpCodingError::NoSpace);
@@ -309,7 +309,7 @@ impl EncodeIntoOpStream for Op {
 
 impl EncodeIntoOpStream for Word {
     fn encode_into(
-        &self, stream: &mut [Word], index: &mut usize
+        &self, stream: &mut [Word], index: &mut usize,
     ) -> Result<(), OpCodingError> {
         stream[*index] = *self;
         *index += 1;
@@ -321,7 +321,7 @@ impl EncodeIntoOpStream for Word {
 mod tests {
     use crate::{
         arch::LOCAL_ADDRESS_BITS,
-        opcode::{Op, OP_CODE_BITS}
+        opcode::{Op, OP_CODE_BITS},
     };
 
     #[test]

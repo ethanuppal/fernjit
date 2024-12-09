@@ -1,11 +1,11 @@
-// Copyright (C) 2024 Ethan Uppal. All rights reserved.
+// Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
 use std::{io, ptr, slice};
 
 /// Memory mapped with execute permissions.
 pub struct ExecutableMemory {
     start: *mut u8,
-    length: usize
+    length: usize,
 }
 
 impl ExecutableMemory {
@@ -34,7 +34,7 @@ impl ExecutableMemory {
                 libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
                 flags,
                 -1,
-                0
+                0,
             );
             if start == libc::MAP_FAILED {
                 return Err(io::Error::last_os_error());
@@ -50,7 +50,7 @@ impl ExecutableMemory {
             // }
             Ok(ExecutableMemory {
                 start: start as *mut u8,
-                length: aligned_length
+                length: aligned_length,
             })
         }
     }
