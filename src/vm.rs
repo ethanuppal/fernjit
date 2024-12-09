@@ -75,7 +75,9 @@ impl VM {
         self.call_stack.clear();
         self.call_stack.push(StackFrame {
             locals: [0; LOCALS_SIZE],
-            return_address: 0  // we will never return to this address, as if the first frame is popped, the VM will stop
+            return_address: 0 /* once the initial frame is popped, execution
+                               * stops, so it doesn't  matter what address we
+                               * have here */
         });
         Ok(())
     }
@@ -173,7 +175,7 @@ impl VM {
         self.current_frame().locals[address as usize]
     }
 
-    fn write_local(&mut self, address: LocalAddress, value: Word) -> () {
+    fn write_local(&mut self, address: LocalAddress, value: Word) {
         self.current_frame_mut().locals[address as usize] = value;
     }
 
