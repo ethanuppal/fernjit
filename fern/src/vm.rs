@@ -7,7 +7,7 @@ use crate::{
         InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS, CODE_SIZE,
         LOCALS_SIZE, RETURN_LOCALS,
     },
-    opcode::{EncodeIntoOpStream, Op, OpCodingError, IMM_BITS, IMM_EXT_BITS},
+    opcode::{ Op,  IMM_BITS, IMM_EXT_BITS},
 };
 
 macro_rules! sign_extend_to {
@@ -66,8 +66,8 @@ impl Default for VM {
 }
 
 impl VM {
-    pub fn load<O: EncodeIntoOpStream>(&mut self, program: &[O]) -> VMResult {
-        let mut pos = 0;
+    pub fn load<O: EncodeIntoOpStream>(&mut self, program: &[O]) -> VMResult
+{         let mut pos = 0;
         for op in program {
             op.encode_into(self.code.as_mut(), &mut pos)?;
         }
@@ -127,8 +127,8 @@ impl VM {
                 let ra = frame.return_address;
 
                 let popped = self.call_stack.pop().expect(
-                    "call stack expected to always have one frame while running."
-                );
+                    "call stack expected to always have one frame while
+running."                 );
                 if let Some(frame_below) = self.call_stack.last_mut() {
                     frame_below.locals[RETURN_LOCALS]
                         .copy_from_slice(&popped.locals[RETURN_LOCALS]);
@@ -139,10 +139,11 @@ impl VM {
             Op::Call(offset) => {
                 let as_usize: usize = offset
                     .try_into()
-                    .expect("illegal offset, too large for platform"); // explodes on microcontrollers
-                let extended =
-                    sign_extend_to!(InstructionAddress, as_usize, IMM_EXT_BITS);
-                let new_ip = self.ip.wrapping_add(extended); // handle negative offsets
+                    .expect("illegal offset, too large for platform"); //
+explodes on microcontrollers                 let extended =
+                    sign_extend_to!(InstructionAddress, as_usize,
+IMM_EXT_BITS);                 let new_ip = self.ip.wrapping_add(extended);
+// handle negative offsets
 
                 let mut new_frame = StackFrame {
                     locals: [0; LOCALS_SIZE],
@@ -200,8 +201,8 @@ mod tests {
     #[test]
     fn basic_program() {
         let mut vm = VM::default();
-        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret()])
-            .expect("invalid program");
+        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1),
+Op::Ret()])             .expect("invalid program");
 
         for _ in 0..3 {
             vm.step().expect("failed to run program");
