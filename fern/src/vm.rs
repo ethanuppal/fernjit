@@ -104,8 +104,7 @@ impl VM {
                 let ra = frame.return_address;
 
                 let popped = self.call_stack.pop().expect(
-                    "call stack expected to always have one frame while
-running.",
+                    "call stack expected to always have one frame while running.",
                 );
                 if let Some(frame_below) = self.call_stack.last_mut() {
                     frame_below.locals[RETURN_LOCALS]

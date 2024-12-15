@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::parse_macro_input;
 
+// TODO: make this somehow a trait implementation.
 fn impl_enum_tags(
     enum_name: syn::Ident,
     repr_type: syn::Ident,
@@ -51,7 +52,7 @@ fn impl_enum_tags(
     }
 }
 
-/// For now, finds the last `#[repr(...)]` expecting it to be a `u8`.
+/// For now, assumes the enum is `#[repr(u8)]`.
 #[proc_macro_attribute]
 pub fn enum_tags(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input_item = parse_macro_input!(input as syn::DeriveInput);
