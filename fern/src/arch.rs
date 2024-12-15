@@ -7,7 +7,7 @@ pub type InstructionAddress = usize; // TODO: better name?
 pub type LocalAddress = u8;
 
 pub const fn bitmask(bits: usize) -> Word {
-    (0 << bits) - 1
+    ((1 as Word) << bits).wrapping_sub(1)
 }
 
 pub const LOCAL_ADDRESS_BITS: usize = LocalAddress::BITS as usize;

@@ -60,6 +60,7 @@ pub enum Op {
     Add(LocalAddress, LocalAddress, LocalAddress),
     Call(ExtendedImmediate),
     Ret,
+    Nop,
 }
 
 impl Op {
@@ -69,7 +70,7 @@ impl Op {
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Add(a, b, c) => Self::encode_packed_abc_args(a, b, c),
             Self::Call(ix) => Self::encode_packed_ix_args(ix),
-            Self::Ret => 0,
+            Self::Ret | Self::Nop => 0,
         };
 
         (self.opcode() as Word) | (encoded_args << OPCODE_BITS)
@@ -84,6 +85,7 @@ impl Op {
             Self::ADD_TAG => Self::decode_packed_abc_args(args, Self::Add),
             Self::CALL_TAG => Self::decode_packed_ix_args(args, Self::Call),
             Self::RET_TAG => Some(Self::Ret),
+            Self::NOP_TAG => Some(Self::Nop),
             _ => None,
         }
     }
@@ -166,56 +168,3 @@ mod tests {
         assert_eq!(Op::Ret.opcode() as Word, Op::Ret.encode_packed());
     }
 }
-
-// do we still want this?
-//
-// // pub enum OpCodingError {
-//     NoSpace,
-//     Other,
-// }
-//
-// pub trait EncodeIntoOpStream {
-//     /// Encodes a representation of an operation into a `stream` at the given
-//     /// `index`.
-//     fn encode_into(
-//         &self, stream: &mut [Word], index: &mut usize,
-//     ) -> Result<(), OpCodingError>;
-// }
-//
-// impl Op {
-//     /// Decodes an `Op` from a `stream` starting at the given `index`.
-// Returns     /// the `Op` and the length used from the stream, in the case of
-//     /// multi-word encoding.
-//     pub fn decode_from(
-//         stream: &[Word], index: usize,
-//     ) -> Result<(Op, usize), OpCodingError> {
-//         Ok((
-//             Self::decode_packed(stream[index]).ok_or(OpCodingError::Other)?,
-//             1,
-//         ))
-//     }
-// }
-//
-// // so I can easily switch between packed and VL encoding
-// impl EncodeIntoOpStream for Op {
-//     fn encode_into(
-//         &self, stream: &mut [Word], index: &mut usize,
-//     ) -> Result<(), OpCodingError> {
-//         if *index >= stream.len() {
-//             return Err(OpCodingError::NoSpace);
-//         }
-//         stream[*index] = self.encode_packed().ok_or(OpCodingError::Other)?;
-//         *index += 1;
-//         Ok(())
-//     }
-// }
-//
-// impl EncodeIntoOpStream for Word {
-//     fn encode_into(
-//         &self, stream: &mut [Word], index: &mut usize,
-//     ) -> Result<(), OpCodingError> {
-//         stream[*index] = *self;
-//         *index += 1;
-//         Ok(())
-//     }
-// }
