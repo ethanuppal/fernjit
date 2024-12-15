@@ -55,15 +55,25 @@ pub const IMM_EXT_BITS: usize = 24;
 #[enum_tags]
 #[derive(Clone, Copy)]
 pub enum Op {
+    /// `Self::Mov(a, b)` copies the contents at address `b` to `a`.
     Mov(LocalAddress, LocalAddress),
+    /// `Self::MovI(a, i)` loads `i` at address `a`.
     MovI(LocalAddress, Immediate),
+    /// `Self::Add(a, b, c)` loads the sum of the contents at addresses `b` and
+    /// `c`  at address `a`.
     Add(LocalAddress, LocalAddress, LocalAddress),
+    /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
+    /// code instruction, pushing a new call frame.
     Call(ExtendedImmediate),
+    /// `Self::Ret` restores the previous call frame and restores the
+    /// instruction pointer.
     Ret,
+    /// `Self::Nop` has no effect.
     Nop,
 }
 
 impl Op {
+    /// Encodes this operation as a [`Word`].
     pub fn encode_packed(&self) -> Word {
         let encoded_args = match *self {
             Self::Mov(a, b) => Self::encode_packed_ab_args(a, b),
@@ -76,6 +86,7 @@ impl Op {
         (self.opcode() as Word) | (encoded_args << OPCODE_BITS)
     }
 
+    /// Decodes this operation from a [`Word`].
     pub fn decode_packed(word: Word) -> Option<Self> {
         let opcode = (word & bitmask(OPCODE_BITS)) as RawOpCode;
         let args = word >> OPCODE_BITS;
@@ -101,7 +112,8 @@ impl Op {
     }
 
     fn decode_packed_ab_args(
-        args: Word, f: impl FnOnce(LocalAddress, LocalAddress) -> Self,
+        args: Word,
+        f: impl FnOnce(LocalAddress, LocalAddress) -> Self,
     ) -> Option<Self> {
         let a = args & bitmask(LOCAL_ADDRESS_BITS);
         let b = (args >> LOCAL_ADDRESS_BITS) & bitmask(LOCAL_ADDRESS_BITS);
@@ -109,7 +121,9 @@ impl Op {
     }
 
     fn encode_packed_abc_args(
-        a: LocalAddress, b: LocalAddress, c: LocalAddress,
+        a: LocalAddress,
+        b: LocalAddress,
+        c: LocalAddress,
     ) -> Word {
         (a as Word)
             | ((b as Word) << LOCAL_ADDRESS_BITS)
@@ -131,7 +145,8 @@ impl Op {
     }
 
     fn decode_packed_ai_args(
-        args: Word, f: impl FnOnce(LocalAddress, Immediate) -> Self,
+        args: Word,
+        f: impl FnOnce(LocalAddress, Immediate) -> Self,
     ) -> Option<Self> {
         let a = args & bitmask(LOCAL_ADDRESS_BITS);
         let i = (args >> LOCAL_ADDRESS_BITS) & bitmask(IMM_BITS);
@@ -143,7 +158,8 @@ impl Op {
     }
 
     fn decode_packed_ix_args(
-        args: Word, f: impl FnOnce(ExtendedImmediate) -> Self,
+        args: Word,
+        f: impl FnOnce(ExtendedImmediate) -> Self,
     ) -> Option<Self> {
         let ix = args & bitmask(IMM_EXT_BITS);
         Some(f(ix as ExtendedImmediate))
