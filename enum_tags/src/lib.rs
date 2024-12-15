@@ -3,7 +3,8 @@ use quote::{format_ident, quote};
 use syn::parse_macro_input;
 
 fn impl_enum_tags(
-    enum_name: syn::Ident, repr_type: syn::Ident,
+    enum_name: syn::Ident,
+    repr_type: syn::Ident,
     variants: impl Iterator<Item = syn::Variant>,
 ) -> proc_macro2::TokenStream {
     let mut tag_idents = Vec::new();
