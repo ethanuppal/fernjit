@@ -20,6 +20,10 @@ endif
 test:
 	$(PREFIX) cargo test
 
+.PHONY: test_cov_vm
+test_cov_vm:
+	cargo tarpaulin -p fern
+
 .PHONY: build
 build:
 	$(PREFIX) cargo build
