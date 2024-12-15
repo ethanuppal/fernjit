@@ -20,6 +20,6 @@ jobs:
       - name: Install dependencies
         run: make deps
       - name: Check coverage
-        run: make test_cov_vm
+        run: make test_cov_vm COVERALLS = ${{ secrets.COVERALLS_REPO_TOKEN }}
       - name: Coveralls
         uses: coverallsapp/github-action@v2

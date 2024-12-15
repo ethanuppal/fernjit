@@ -15,7 +15,7 @@ deps:
 ifeq ($(UNAME), Darwin)
 	rustup toolchain install stable-x86_64-apple-darwin
 endif
-	cargo install cargo-tarpaulin
+	cargo install cargo-tarpaulin --coveralls $(COVERALLS)
 
 .PHONY: test
 test:
