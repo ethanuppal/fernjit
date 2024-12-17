@@ -3,7 +3,7 @@
 use core::ops::Range;
 
 pub type Word = u32;
-pub type InstructionAddress = usize; // TODO: better name?
+pub type InstructionAddress = usize;
 pub type LocalAddress = u8;
 
 pub const fn bitmask(bits: usize) -> Word {

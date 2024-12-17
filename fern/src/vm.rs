@@ -10,8 +10,6 @@ use crate::{
     op::{Op, IMM_BITS, IMM_EXT_BITS},
 };
 
-// TODO: is this uglier than the macro version?
-// TODO: if we use the newtype pattern the `AsPrimitive` won't work
 fn sign_extend_to<
     In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
     Out: 'static + num_traits::Unsigned + Copy,

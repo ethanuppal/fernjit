@@ -48,18 +48,17 @@ impl syn::parse::Parse for EnumTagsArgs {
         let visibility = input.parse()?;
 
         input.parse::<syn::Token![,]>().map_err(|mut error| {
-            error.combine(syn::Error::new(
-                input.span(),
-                format!("Missing comma after `{}` visibility", visibility),
-            ));
+            error.combine(input.error(format!(
+                "Missing comma after `{}` visibility",
+                visibility
+            )));
             error
         })?;
 
         input.parse::<kw::repr>().map_err(|mut error| {
-            error.combine(syn::Error::new(
-                input.span(),
-                format!("Missing `repr` after `{},`", visibility),
-            ));
+            error.combine(
+                input.error(format!("Missing `repr` after `{},`", visibility)),
+            );
             error
         })?;
 
@@ -74,7 +73,6 @@ impl syn::parse::Parse for EnumTagsArgs {
     }
 }
 
-// TODO: make this somehow a trait implementation.
 fn impl_enum_tags(
     enum_visibility: syn::Visibility,
     enum_name: syn::Ident,
