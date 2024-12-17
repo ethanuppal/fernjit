@@ -10,4 +10,4 @@ validate = []
 [dependencies]
 paste.workspace = true
 static_assertions.workspace = true
-enum_tags = { path = "../enum_tags/", package = "fern-enum-tags" }
+enum_tags.workspace = true
