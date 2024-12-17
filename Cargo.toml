@@ -3,6 +3,7 @@ members = ["enum_tags", "fern", "jit"]
 resolver = "2"
 
 [workspace.package]
+repository = "https://github.com/ethanuppal/fernjit"
 version = "0.0.0"
 edition = "2021"
 license-file = "LICENSE"
