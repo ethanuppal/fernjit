@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
-use fern_enum_tags::enum_tags;
+use enum_tags::enum_tags;
 
 use crate::arch::{bitmask, LocalAddress, Word, LOCAL_ADDRESS_BITS};
 
