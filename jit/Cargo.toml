@@ -1,5 +1,5 @@
 [package]
-name = "jit"
+name = "fern-jit"
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
