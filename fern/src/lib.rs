@@ -1,5 +1,7 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
+#![forbid(unsafe_code)]
+
 pub mod arch;
-pub mod opcode;
+pub mod op;
 pub mod vm;
