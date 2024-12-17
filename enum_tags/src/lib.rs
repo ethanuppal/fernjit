@@ -1,12 +1,11 @@
 use std::fmt;
 
 use proc_macro::TokenStream;
-use proc_macro2::Span;
 use quote::{format_ident, quote};
 use syn::{parenthesized, parse_macro_input};
 
 enum Visibility {
-    Public(Span),
+    Public(proc_macro2::Span),
     Private,
 }
 
