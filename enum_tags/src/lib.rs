@@ -1,8 +1,7 @@
 use std::fmt;
 
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
-use syn::{parenthesized, parse_macro_input};
+use quote::quote;
 
 enum Visibility {
     Public(proc_macro2::Span),
@@ -65,7 +64,7 @@ impl syn::parse::Parse for EnumTagsArgs {
         })?;
 
         let content;
-        parenthesized!(content in input);
+        syn::parenthesized!(content in input);
         let repr_type = content.parse()?;
 
         Ok(Self {
@@ -88,7 +87,7 @@ fn impl_enum_tags(
 
     for variant in variants {
         let variant_name = variant.ident;
-        let tag_ident = format_ident!(
+        let tag_ident = quote::format_ident!(
             "{}_TAG",
             variant_name.to_string().to_ascii_uppercase()
         );
@@ -167,9 +166,9 @@ fn impl_enum_tags(
 /// type for which you may `#[repr(...)]` the `enum`.
 #[proc_macro_attribute]
 pub fn enum_tags(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as EnumTagsArgs);
+    let args = syn::parse_macro_input!(args as EnumTagsArgs);
 
-    let input_item = parse_macro_input!(input as syn::DeriveInput);
+    let input_item = syn::parse_macro_input!(input as syn::DeriveInput);
     let input_item_cloned = input_item.clone();
 
     let data_enum = match input_item.data {
