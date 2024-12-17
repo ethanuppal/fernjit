@@ -1,5 +1,5 @@
 [package]
-name = "fern"
+name = "fern-vm"
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
