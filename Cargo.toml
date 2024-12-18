@@ -3,6 +3,8 @@ members = ["enum_tags", "fern", "jit"]
 resolver = "2"
 
 [workspace.package]
+repository = "https://github.com/ethanuppal/fernjit"
+readme = "README.md"
 version = "0.0.0"
 edition = "2021"
 license-file = "LICENSE"
@@ -15,3 +17,4 @@ syn = { version = "2.0.90", features = ["parsing"] }
 quote = "1.0.37"
 proc-macro2 = "1.0.92"
 num-traits = "0.2.19"
+enum_tags = { path = "enum_tags/", package = "fern-enum-tags", version = "0.0.0" }

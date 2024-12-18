@@ -1,5 +1,8 @@
 [package]
-name = "fern"
+name = "fern-vm"
+description = "The fern bytecode runtime"
+repository.workspace = true
+readme.workspace = true
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
@@ -8,4 +11,4 @@ license-file.workspace = true
 paste.workspace = true
 static_assertions.workspace = true
 num-traits.workspace = true
-enum_tags = { path = "../enum_tags/" }
+enum_tags.workspace = true
