@@ -4,28 +4,42 @@ use std::vec;
 
 use crate::{
     arch::{
-        InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS, CODE_SIZE,
-        LOCALS_SIZE, RETURN_LOCALS,
+        InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS, LOCALS_COUNT,
+        MAX_CODE_LENGTH, RETURN_LOCALS,
     },
-    opcode::{Op, IMM_BITS, IMM_EXT_BITS},
+    op::{Op, IMM_BITS, IMM_EXT_BITS},
 };
 
-macro_rules! sign_extend_to {
-    ($t:ty, $value:expr, $bits:expr) => {{
-        let value = $value as $t;
-        let sign_bit = 1 << ($bits - 1);
-        if value & sign_bit != 0 {
-            let extension = !((1 << $bits) - 1);
-            value | extension
-        } else {
-            value
-        }
-    }};
+fn sign_extend_to<
+    In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
+    Out: 'static + num_traits::Unsigned + Copy,
+>(
+    value: In,
+    bits: usize,
+) -> Out {
+    let sign_bit = In::one() << (bits - 1);
+    if value & sign_bit != In::zero() {
+        let extension = !((In::one() << bits) - In::one());
+        value | extension
+    } else {
+        value
+    }
+    .as_()
 }
 
 struct StackFrame {
-    locals: [Word; LOCALS_SIZE],
+    // TODO: do we wnat this on the heap?
+    locals: [Word; LOCALS_COUNT],
     return_address: InstructionAddress,
+}
+
+impl StackFrame {
+    fn new_returning_to(return_address: InstructionAddress) -> Self {
+        Self {
+            locals: [0; LOCALS_COUNT],
+            return_address,
+        }
+    }
 }
 
 pub struct VM {
@@ -37,9 +51,7 @@ pub struct VM {
 
 #[derive(Debug)]
 pub enum VMError {
-    InvalidOp,
     InvalidArgs,
-    CodeOversized,
     InvalidIP,
 }
 
@@ -48,7 +60,7 @@ pub type VMResult = Result<(), VMError>;
 impl Default for VM {
     fn default() -> Self {
         Self {
-            code: vec![0; CODE_SIZE].into_boxed_slice(),
+            code: vec![0; MAX_CODE_LENGTH].into_boxed_slice(),
             code_length: 0,
             call_stack: vec![],
             ip: 0,
@@ -57,19 +69,22 @@ impl Default for VM {
 }
 
 impl VM {
-    pub fn load(&mut self, program: &[Op]) -> VMResult {
+    pub fn load(&mut self, program: &[Op]) {
+        // TODO: should this be an assertion or a `VMError`?
+        assert!(
+            program.len() <= MAX_CODE_LENGTH,
+            "program too large to load (length={}, max length={})",
+            program.len(),
+            MAX_CODE_LENGTH
+        );
         for (i, op) in program.iter().enumerate() {
             self.code[i] = op.encode_packed();
         }
         self.code_length = program.len();
         self.call_stack.clear();
-        self.call_stack.push(StackFrame {
-            locals: [0; LOCALS_SIZE],
-            return_address: 0, /* once the initial frame is popped, execution
-                                * stops, so it doesn't  matter what address
-                                * we have here */
-        });
-        Ok(())
+        // this return address doesn't matter because execution stops when this
+        // frame is popped
+        self.call_stack.push(StackFrame::new_returning_to(0));
     }
 
     pub fn run(&mut self) -> VMResult {
@@ -79,10 +94,6 @@ impl VM {
         Ok(())
     }
 
-    fn decode_op(&self) -> Op {
-        Op::decode_packed(self.code[self.ip]).unwrap()
-    }
-
     fn step(&mut self) -> VMResult {
         match self.decode_op() {
             Op::Mov(to, from) => {
@@ -90,7 +101,7 @@ impl VM {
                 self.jump_to(self.ip + 1)
             }
             Op::MovI(to, constant) => {
-                let extended = sign_extend_to!(Word, constant, IMM_BITS);
+                let extended = sign_extend_to(constant, IMM_BITS);
                 self.write_local(to, extended);
                 self.jump_to(self.ip + 1)
             }
@@ -100,37 +111,28 @@ impl VM {
                 self.jump_to(self.ip + 1)
             }
             Op::Ret => {
-                let frame = self.current_frame();
-                let ra = frame.return_address;
-
-                let popped = self.call_stack.pop().expect(
-                    "call stack expected to always have one frame while running.",
+                let callee_frame = self.call_stack.pop().expect(
+                    "call stack should always have one frame while running.",
                 );
-                if let Some(frame_below) = self.call_stack.last_mut() {
-                    frame_below.locals[RETURN_LOCALS]
-                        .copy_from_slice(&popped.locals[RETURN_LOCALS]);
+                let return_address = callee_frame.return_address;
+
+                if let Some(caller_frame) = self.call_stack.last_mut() {
+                    caller_frame.locals[RETURN_LOCALS]
+                        .copy_from_slice(&callee_frame.locals[RETURN_LOCALS]);
                 }
 
-                self.jump_to(ra)
+                self.jump_to(return_address)
             }
             Op::Call(offset) => {
-                let as_usize: usize = offset
-                    .try_into()
-                    .expect("illegal offset, too large for platform"); // explodes on microcontrollers
-                let extended =
-                    sign_extend_to!(InstructionAddress, as_usize, IMM_EXT_BITS);
-                let new_ip = self.ip.wrapping_add(extended);
-                // handle negative offsets
+                let new_ip =
+                    self.ip.wrapping_add(sign_extend_to(offset, IMM_EXT_BITS));
 
-                let mut new_frame = StackFrame {
-                    locals: [0; LOCALS_SIZE],
-                    return_address: self.ip + 1,
-                };
-                new_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
+                let mut callee_frame =
+                    StackFrame::new_returning_to(self.ip + 1);
+                callee_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
                     &self.current_frame().locals[ARGUMENT_LOCALS],
                 );
-
-                self.call_stack.push(new_frame);
+                self.call_stack.push(callee_frame);
 
                 self.jump_to(new_ip)
             }
@@ -140,14 +142,17 @@ impl VM {
         Ok(())
     }
 
+    fn decode_op(&self) -> Op {
+        Op::decode_packed(self.code[self.ip]).unwrap()
+    }
+
     fn jump_to(&mut self, new_ip: usize) -> VMResult {
         if new_ip >= self.code_length {
-            return Err(VMError::InvalidIP);
-        };
-
-        self.ip = new_ip;
-
-        Ok(())
+            Err(VMError::InvalidIP)
+        } else {
+            self.ip = new_ip;
+            Ok(())
+        }
     }
 
     fn read_local(&self, address: LocalAddress) -> Word {
@@ -159,38 +164,37 @@ impl VM {
     }
 
     fn current_frame(&self) -> &StackFrame {
-        self.call_stack.last().expect(
-            "call stack expected to always have one frame while running.",
-        )
+        self.call_stack
+            .last()
+            .expect("call stack should always have one frame while running.")
     }
 
     fn current_frame_mut(&mut self) -> &mut StackFrame {
-        self.call_stack.last_mut().expect(
-            "call stack expected to always have one frame while running.",
-        )
+        self.call_stack
+            .last_mut()
+            .expect("call stack should always have one frame while running.")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::VM;
-    use crate::opcode::{ExtendedImmediate, Op};
+    use crate::op::{ExtendedImmediate, Op};
 
     #[test]
     fn basic_program() {
         let mut vm = VM::default();
-        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret])
-            .expect("invalid program");
+        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret]);
 
         for _ in 0..3 {
-            vm.step().expect("failed to run program");
+            vm.step().expect("program should run without errors")
         }
 
         assert_eq!(1, vm.current_frame().locals[0]);
         assert_eq!(2, vm.current_frame().locals[1]);
         assert_eq!(3, vm.current_frame().locals[2]);
 
-        vm.step().expect("failed to run program");
+        vm.step().expect("program should run without errors");
         assert!(vm.call_stack.is_empty());
     }
 
@@ -206,17 +210,16 @@ mod tests {
             // func add
             Op::Add(0, 0, 1),
             Op::Ret,
-        ])
-        .expect("invalid program");
+        ]);
 
         for _ in 0..5 {
-            vm.step().expect("failed to run program");
+            vm.step().expect("program should run without errors");
         }
 
         assert_eq!(3, vm.current_frame().locals[0]);
         assert_eq!(2, vm.current_frame().locals[1]);
 
-        vm.step().expect("failed to run program");
+        vm.step().expect("program should run without errors");
         assert!(vm.call_stack.is_empty());
     }
 
@@ -237,15 +240,15 @@ mod tests {
             Op::Ret,
         ];
 
-        vm.load(&program).expect("invalid program");
+        vm.load(&program);
 
         for _ in 0..7 {
-            vm.step().expect("failed to run program");
+            vm.step().expect("program should run without errors");
         }
 
         assert_eq!(6, vm.current_frame().locals[0]);
 
-        vm.step().expect("failed to run program");
+        vm.step().expect("program should run without errors");
         assert!(vm.call_stack.is_empty());
     }
 }
