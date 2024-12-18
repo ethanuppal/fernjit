@@ -1,5 +1,8 @@
 [package]
 name = "fern-jit"
+description = "JIT compiler for the fern bytecode runtime"
+repository.workspace = true
+readme.workspace = true
 version.workspace = true
 edition.workspace = true
 license-file.workspace = true
