@@ -14,9 +14,11 @@ pub type Immediate = u16;
 pub type ExtendedImmediate = u32;
 
 /// Bits for opcode.
-pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types
-                                  // are just smallest thing that can fit,                                    //
-                                  // this is actual number of bits, which may be less.
+pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
+                                  // just smallest thing that can fit; this is
+                                  // the eactual number of bits, which may be
+                                  // less.
+
 /// Bits for immediate value.
 pub const IMM_BITS: usize = 16;
 
@@ -24,7 +26,7 @@ pub const IMM_BITS: usize = 16;
 pub const IMM_EXT_BITS: usize = 24;
 
 #[rustfmt::skip]
- mod encoding_spec {
+mod encoding_spec {
      use super::*;
      use static_assertions::{const_assert, const_assert_eq};
 
@@ -35,7 +37,7 @@ pub const IMM_EXT_BITS: usize = 24;
      }
 
 //   +---------------------------------------------------------------------------------+
-//   | Encodings (inspired by Lua). Ops fit in one `Word`.                             |
+//   | Encodings (inspired by Lua). `Op`s fit in one `Word`.                           |
 //   +---------------------------------------------------------------------------------+
 //   | ABC (3 addresses):                                                              |
        const_assert_eq!(bits![Word], OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS); 
@@ -51,9 +53,8 @@ pub const IMM_EXT_BITS: usize = 24;
 }
 
 /// A VM operation.
-#[repr(u8)]
-#[enum_tags]
 #[derive(Clone, Copy)]
+#[enum_tags(private, repr(RawOpCode))]
 pub enum Op {
     /// `Self::Mov(a, b)` copies the contents at address `b` to `a`.
     Mov(LocalAddress, LocalAddress),
@@ -74,7 +75,7 @@ pub enum Op {
 
 impl Op {
     /// Encodes this operation as a [`Word`].
-    pub fn encode_packed(&self) -> Word {
+    pub const fn encode_packed(&self) -> Word {
         let encoded_args = match *self {
             Self::Mov(a, b) => Self::encode_packed_ab_args(a, b),
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
@@ -101,13 +102,11 @@ impl Op {
         }
     }
 
-    /// # Safety
-    /// See <https://doc.rust-lang.org/std/mem/fn.discriminant.html>
-    pub fn opcode(&self) -> RawOpCode {
-        unsafe { *<*const _>::from(self).cast::<RawOpCode>() }
+    pub const fn opcode(&self) -> RawOpCode {
+        self.tag()
     }
 
-    fn encode_packed_ab_args(a: LocalAddress, b: LocalAddress) -> Word {
+    const fn encode_packed_ab_args(a: LocalAddress, b: LocalAddress) -> Word {
         (a as Word) | ((b as Word) << LOCAL_ADDRESS_BITS)
     }
 
@@ -120,7 +119,7 @@ impl Op {
         Some(f(a as LocalAddress, b as LocalAddress))
     }
 
-    fn encode_packed_abc_args(
+    const fn encode_packed_abc_args(
         a: LocalAddress,
         b: LocalAddress,
         c: LocalAddress,
@@ -129,6 +128,7 @@ impl Op {
             | ((b as Word) << LOCAL_ADDRESS_BITS)
             | ((c as Word) << (2 * LOCAL_ADDRESS_BITS))
     }
+
     fn decode_packed_abc_args(
         args: Word,
         f: impl FnOnce(LocalAddress, LocalAddress, LocalAddress) -> Self,
@@ -140,7 +140,7 @@ impl Op {
         Some(f(a as LocalAddress, b as LocalAddress, c as LocalAddress))
     }
 
-    fn encode_packed_ai_args(a: LocalAddress, i: Immediate) -> Word {
+    const fn encode_packed_ai_args(a: LocalAddress, i: Immediate) -> Word {
         (a as Word) | ((i as Word) << LOCAL_ADDRESS_BITS)
     }
 
@@ -153,7 +153,7 @@ impl Op {
         Some(f(a as LocalAddress, i as Immediate))
     }
 
-    fn encode_packed_ix_args(ix: ExtendedImmediate) -> Word {
+    const fn encode_packed_ix_args(ix: ExtendedImmediate) -> Word {
         ix as Word
     }
 
@@ -170,7 +170,7 @@ impl Op {
 mod tests {
     use crate::{
         arch::{Word, LOCAL_ADDRESS_BITS},
-        opcode::{Op, OPCODE_BITS},
+        op::{Op, OPCODE_BITS},
     };
 
     #[test]
