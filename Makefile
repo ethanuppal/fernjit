@@ -15,10 +15,15 @@ deps:
 ifeq ($(UNAME), Darwin)
 	rustup toolchain install stable-x86_64-apple-darwin
 endif
+	cargo install cargo-tarpaulin 
 
 .PHONY: test
 test:
 	$(PREFIX) cargo test
+
+.PHONY: test_cov_vm
+test_cov_vm:
+	cargo tarpaulin -p fern --coveralls $(COVERALLS)
 
 .PHONY: build
 build:
