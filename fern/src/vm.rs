@@ -28,7 +28,6 @@ fn sign_extend_to<
 }
 
 struct StackFrame {
-    // TODO: do we wnat this on the heap?
     locals: [Word; LOCALS_COUNT],
     return_address: InstructionAddress,
 }
@@ -70,7 +69,6 @@ impl Default for VM {
 
 impl VM {
     pub fn load(&mut self, program: &[Op]) {
-        // TODO: should this be an assertion or a `VMError`?
         assert!(
             program.len() <= MAX_CODE_LENGTH,
             "program too large to load (length={}, max length={})",
