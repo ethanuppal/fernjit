@@ -10,63 +10,14 @@ use crate::{
     op::{Op, IMM_BITS},
 };
 
-fn sign_extend_to<
-    In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
-    Out: 'static + num_traits::Unsigned + Copy,
->(
-    value: In,
-    bits: usize,
-) -> Out {
-    let sign_bit = In::one() << (bits - 1);
-    if value & sign_bit != In::zero() {
-        let extension = !((In::one() << bits) - In::one());
-        value | extension
-    } else {
-        value
-    }
-    .as_()
-}
-
-// TODO: this might need to be split apart into what we take as input and what
-// we use internally. Internally we probably want to store trace info, whether
-// the functions is JITed, etc.
-pub struct VMFunction {
-    code: Vec<Word>,
-}
-
-impl VMFunction {
-    pub fn from_ops(ops: &[Op]) -> Self {
-        let mut code = vec![0; ops.len()];
-        for (i, op) in ops.iter().enumerate() {
-            code[i] = op.encode_packed();
-        }
-        Self { code }
-    }
-}
-
-struct IP {
-    func: FunctionId,
-    instr: InstructionAddress,
-}
-
-struct StackFrame {
-    locals: [Word; LOCALS_COUNT],
-    return_address: IP,
-}
-
-impl StackFrame {
-    fn new_returning_to(return_address: IP) -> Self {
-        Self {
-            locals: [0; LOCALS_COUNT],
-            return_address,
-        }
-    }
-}
-
 pub struct VM {
     functions: Vec<VMFunction>,
     call_stack: Vec<StackFrame>,
-    ip: IP,
+    ip: InstructionPointer,
+}
+
+struct VMFunction {
+    code: Vec<Word>,
 }
 
 #[derive(Debug)]
@@ -77,20 +28,46 @@ pub enum VMError {
 
 pub type VMResult = Result<(), VMError>;
 
+struct StackFrame {
+    locals: [Word; LOCALS_COUNT],
+    return_address: InstructionPointer,
+}
+
+impl StackFrame {
+    fn new_returning_to(return_address: InstructionPointer) -> Self {
+        Self {
+            locals: [0; LOCALS_COUNT],
+            return_address,
+        }
+    }
+}
+
+struct InstructionPointer {
+    func: FunctionId,
+    instr: InstructionAddress,
+}
+
+pub type EncodedFunction = Vec<Word>;
+pub type EncodedProgram = Vec<EncodedFunction>;
+pub type DecodedFunction = Vec<Op>;
+pub type DecodedProgram = Vec<DecodedFunction>;
+
 impl VM {
-    // TODO: this should take a slice of functions, idk how to do it nicely yet
-    /// Creates a new VM from a set of `functions`. Execution begins at the
-    /// first op of the first function.
-    pub fn from_functions(functions: Vec<VMFunction>) -> Self {
+    /// Creates a VM from an already encoded program.
+    pub fn from_encoded_program(program: EncodedProgram) -> VM {
+        let functions = program
+            .into_iter()
+            .map(|code| VMFunction { code })
+            .collect();
+
         Self {
             functions,
             // this return address doesn't matter because execution stops
             // when this frame is popped
-            call_stack: vec![StackFrame::new_returning_to(IP {
-                func: 0,
-                instr: 0,
-            })],
-            ip: IP { func: 0, instr: 0 },
+            call_stack: vec![StackFrame::new_returning_to(
+                InstructionPointer { func: 0, instr: 0 },
+            )],
+            ip: InstructionPointer { func: 0, instr: 0 },
         }
     }
 
@@ -132,10 +109,11 @@ impl VM {
                 self.jump_to(return_address)
             }
             Op::Call(id) => {
-                let mut callee_frame = StackFrame::new_returning_to(IP {
-                    func: self.ip.func,
-                    instr: self.ip.instr + 1,
-                });
+                let mut callee_frame =
+                    StackFrame::new_returning_to(InstructionPointer {
+                        func: self.ip.func,
+                        instr: self.ip.instr + 1,
+                    });
                 callee_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
                     &self.current_frame().locals[ARGUMENT_LOCALS],
                 );
@@ -154,7 +132,7 @@ impl VM {
             .unwrap()
     }
 
-    fn jump_to(&mut self, new_ip: IP) -> VMResult {
+    fn jump_to(&mut self, new_ip: InstructionPointer) -> VMResult {
         if new_ip.func >= self.functions.len()
             || new_ip.instr >= self.functions[new_ip.func].code.len()
         {
@@ -166,11 +144,11 @@ impl VM {
     }
 
     fn jump_to_function(&mut self, func: FunctionId) -> VMResult {
-        self.jump_to(IP { func, instr: 0 })
+        self.jump_to(InstructionPointer { func, instr: 0 })
     }
 
     fn jump_within_function(&mut self, instr: InstructionAddress) -> VMResult {
-        self.jump_to(IP {
+        self.jump_to(InstructionPointer {
             func: self.ip.func,
             instr,
         })
@@ -197,23 +175,43 @@ impl VM {
     }
 }
 
+fn sign_extend_to<
+    In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
+    Out: 'static + num_traits::Unsigned + Copy,
+>(
+    value: In,
+    bits: usize,
+) -> Out {
+    let sign_bit = In::one() << (bits - 1);
+    if value & sign_bit != In::zero() {
+        let extension = !((In::one() << bits) - In::one());
+        value | extension
+    } else {
+        value
+    }
+    .as_()
+}
+
 #[cfg(test)]
 mod tests {
     use std::vec;
 
-    use super::VM;
-    use crate::{op::Op, vm::VMFunction};
+    use super::{DecodedProgram, EncodedProgram, VM};
+    use crate::op::Op;
+
+    fn encode_program(program: DecodedProgram) -> EncodedProgram {
+        program
+            .into_iter()
+            .map(|func| func.into_iter().map(|op| op.encode_packed()).collect())
+            .collect()
+    }
 
     #[test]
     fn basic_program() {
-        let main = VMFunction::from_ops(&[
-            Op::MovI(0, 1),
-            Op::MovI(1, 2),
-            Op::Add(2, 0, 1),
-            Op::Ret,
-        ]);
+        let main =
+            vec![Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret];
 
-        let mut vm = VM::from_functions(vec![main]);
+        let mut vm = VM::from_encoded_program(encode_program(vec![main]));
 
         for _ in 0..3 {
             vm.step().expect("program should run without errors")
@@ -229,16 +227,16 @@ mod tests {
 
     #[test]
     fn call_return() {
-        let main = VMFunction::from_ops(&[
+        let main = vec![
             Op::MovI(0, 1),
             Op::MovI(1, 2),
             Op::Call(1), // call add
             Op::Ret,
-        ]);
+        ];
 
-        let add = VMFunction::from_ops(&[Op::Add(0, 0, 1), Op::Ret]);
+        let add = vec![Op::Add(0, 0, 1), Op::Ret];
 
-        let mut vm = VM::from_functions(vec![main, add]);
+        let mut vm = VM::from_encoded_program(encode_program(vec![main, add]));
 
         for _ in 0..5 {
             vm.step().expect("program should run without errors");
@@ -252,22 +250,23 @@ mod tests {
     }
 
     #[test]
-    fn call_neg_offset() {
-        let main = VMFunction::from_ops(&[
+    fn call_multiple() {
+        let main = vec![
             Op::MovI(0, 3),
             Op::Call(2), // call double
             Op::Ret,
-        ]);
+        ];
 
-        let add = VMFunction::from_ops(&[Op::Add(0, 0, 1), Op::Ret]);
+        let add = vec![Op::Add(0, 0, 1), Op::Ret];
 
-        let double = VMFunction::from_ops(&[
+        let double = vec![
             Op::Mov(1, 0),
             Op::Call(1), // call add
             Op::Ret,
-        ]);
+        ];
 
-        let mut vm = VM::from_functions(vec![main, add, double]);
+        let mut vm =
+            VM::from_encoded_program(encode_program(vec![main, add, double]));
 
         for _ in 0..7 {
             vm.step().expect("program should run without errors");
