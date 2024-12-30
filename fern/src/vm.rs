@@ -8,16 +8,17 @@ use crate::{
         LOCALS_COUNT, RETURN_LOCALS,
     },
     op::{Op, IMM_BITS},
+    program::EncodedProgram,
 };
 
 pub struct VM {
-    functions: Vec<VMFunction>,
+    functions: Box<[VMFunction]>,
     call_stack: Vec<StackFrame>,
     ip: InstructionPointer,
 }
 
 struct VMFunction {
-    code: Vec<Word>,
+    code: Box<[Word]>,
 }
 
 #[derive(Debug)]
@@ -47,17 +48,14 @@ struct InstructionPointer {
     instr: InstructionAddress,
 }
 
-pub type EncodedFunction = Vec<Word>;
-pub type EncodedProgram = Vec<EncodedFunction>;
-pub type DecodedFunction = Vec<Op>;
-pub type DecodedProgram = Vec<DecodedFunction>;
-
 impl VM {
     /// Creates a VM from an already encoded program.
     pub fn from_encoded_program(program: EncodedProgram) -> VM {
         let functions = program
             .into_iter()
-            .map(|code| VMFunction { code })
+            .map(|code| VMFunction {
+                code: code.into_boxed_slice(),
+            })
             .collect();
 
         Self {
@@ -194,17 +192,7 @@ fn sign_extend_to<
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
-
-    use super::{DecodedProgram, EncodedProgram, VM};
-    use crate::op::Op;
-
-    fn encode_program(program: DecodedProgram) -> EncodedProgram {
-        program
-            .into_iter()
-            .map(|func| func.into_iter().map(|op| op.encode_packed()).collect())
-            .collect()
-    }
+    use crate::{op::Op, program::encode_program, vm::VM};
 
     #[test]
     fn basic_program() {
