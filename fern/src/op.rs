@@ -16,7 +16,7 @@ pub type ExtendedImmediate = u32;
 /// Bits for opcode.
 pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
                                   // just smallest thing that can fit; this is
-                                  // the eactual number of bits, which may be
+                                  // the actual number of bits, which may be
                                   // less.
 
 /// Bits for immediate value.
@@ -28,7 +28,7 @@ pub const IMM_EXT_BITS: usize = 24;
 #[rustfmt::skip]
 mod encoding_spec {
      use super::*;
-     use static_assertions::{const_assert, const_assert_eq};
+     use static_assertions::const_assert;
 
      macro_rules! bits {
          ($T:ty) => {
@@ -40,13 +40,13 @@ mod encoding_spec {
 //   | Encodings (inspired by Lua). `Op`s fit in one `Word`.                           |
 //   +---------------------------------------------------------------------------------+
 //   | ABC (3 addresses):                                                              |
-       const_assert_eq!(bits![Word], OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS); 
+       const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= bits![Word]); 
 //   | AB (2 addresses):                                                               |
        const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= bits![Word]); 
 //   | AI (address + immediate)                                                        |
-       const_assert_eq!(bits![Word], OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS); 
+       const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= bits![Word]); 
 //   | IX (extended immediate)                                                         |
-       const_assert_eq!(bits![Word], OPCODE_BITS + IMM_EXT_BITS);
+       const_assert!(OPCODE_BITS + IMM_EXT_BITS <= bits![Word]);
 //   | N (no operands)                                                                 | 
        const_assert!(OPCODE_BITS <= bits![Word]);
 //   +---------------------------------------------------------------------------------+
@@ -64,7 +64,7 @@ pub enum Op {
     /// `c`  at address `a`.
     Add(LocalAddress, LocalAddress, LocalAddress),
     /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
-    /// code instruction, pushing a new call frame.
+    /// VM function, pushing a new call frame.
     Call(ExtendedImmediate),
     /// `Self::Ret` restores the previous call frame and restores the
     /// instruction pointer.
