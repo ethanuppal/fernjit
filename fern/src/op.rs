@@ -2,11 +2,14 @@
 
 use enum_tags::enum_tags;
 
-use crate::arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS};
+use crate::arch::Word;
 use static_assertions::const_assert;
 
 /// Smallest sized integer type that can fit an op code.
 pub type RawOpCode = u8;
+
+/// Smallest sized integer type that can fit a local address.
+pub type LocalAddress = u8;
 
 /// Smallest sized integer type that can fit an immediate value.
 pub type Immediate = u16;
@@ -20,6 +23,10 @@ pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
                                   // the actual number of bits, which may be
                                   // less.
 const_assert!(OPCODE_BITS <= RawOpCode::BITS as usize);
+
+/// Bits for local address.
+pub const LOCAL_ADDRESS_BITS: usize = 8;
+const_assert!(LOCAL_ADDRESS_BITS <= LocalAddress::BITS as usize);
 
 /// Bits for immediate value.
 pub const IMM_BITS: usize = 16;
@@ -170,8 +177,8 @@ pub const fn bitmask(bits: usize) -> Word {
 #[cfg(test)]
 mod tests {
     use crate::{
-        arch::{Word, LOCAL_ADDRESS_BITS},
-        op::{Op, OPCODE_BITS},
+        arch::Word,
+        op::{Op, LOCAL_ADDRESS_BITS, OPCODE_BITS},
     };
 
     #[test]
