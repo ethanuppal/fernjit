@@ -48,62 +48,6 @@ struct InstructionPointer {
     instr: InstructionAddress,
 }
 
-pub struct EncodedProgram {
-    functions: Vec<EncodedFunction>,
-}
-
-impl EncodedProgram {
-    pub fn decode(&self) -> Option<DecodedProgram> {
-        self.functions
-            .iter()
-            .map(EncodedFunction::decode)
-            .collect::<Option<Vec<DecodedFunction>>>()
-            .map(|functions| DecodedProgram { functions })
-    }
-}
-
-pub struct EncodedFunction {
-    body: Vec<Word>,
-}
-
-impl EncodedFunction {
-    pub fn decode(&self) -> Option<DecodedFunction> {
-        self.body
-            .iter()
-            .map(|word| Op::decode_packed(*word))
-            .collect::<Option<Vec<Op>>>()
-            .map(|body| DecodedFunction { body })
-    }
-}
-
-pub struct DecodedProgram {
-    functions: Vec<DecodedFunction>,
-}
-
-impl DecodedProgram {
-    pub fn encode(&self) -> EncodedProgram {
-        EncodedProgram {
-            functions: self
-                .functions
-                .iter()
-                .map(DecodedFunction::encode)
-                .collect(),
-        }
-    }
-}
-
-pub struct DecodedFunction {
-    body: Vec<Op>,
-}
-
-impl DecodedFunction {
-    pub fn encode(&self) -> EncodedFunction {
-        EncodedFunction {
-            body: self.body.iter().map(Op::encode_packed).collect(),
-        }
-    }
-}
-
 impl VM {
     /// Creates a VM from an already encoded program.
     pub fn from_encoded_program(program: EncodedProgram) -> VM {
@@ -226,6 +170,62 @@ impl VM {
         self.call_stack
             .last_mut()
             .expect("call stack should always have one frame while running.")
+    }
+}
+
+pub struct EncodedProgram {
+    functions: Vec<EncodedFunction>,
+}
+
+impl EncodedProgram {
+    pub fn decode(&self) -> Option<DecodedProgram> {
+        self.functions
+            .iter()
+            .map(EncodedFunction::decode)
+            .collect::<Option<Vec<DecodedFunction>>>()
+            .map(|functions| DecodedProgram { functions })
+    }
+}
+
+pub struct EncodedFunction {
+    body: Vec<Word>,
+}
+
+impl EncodedFunction {
+    pub fn decode(&self) -> Option<DecodedFunction> {
+        self.body
+            .iter()
+            .map(|word| Op::decode_packed(*word))
+            .collect::<Option<Vec<Op>>>()
+            .map(|body| DecodedFunction { body })
+    }
+}
+
+pub struct DecodedProgram {
+    functions: Vec<DecodedFunction>,
+}
+
+impl DecodedProgram {
+    pub fn encode(&self) -> EncodedProgram {
+        EncodedProgram {
+            functions: self
+                .functions
+                .iter()
+                .map(DecodedFunction::encode)
+                .collect(),
+        }
+    }
+}
+
+pub struct DecodedFunction {
+    body: Vec<Op>,
+}
+
+impl DecodedFunction {
+    pub fn encode(&self) -> EncodedFunction {
+        EncodedFunction {
+            body: self.body.iter().map(Op::encode_packed).collect(),
+        }
     }
 }
 

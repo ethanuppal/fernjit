@@ -2,7 +2,8 @@
 
 use enum_tags::enum_tags;
 
-use crate::arch::{bitmask, LocalAddress, Word, LOCAL_ADDRESS_BITS};
+use crate::arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS};
+use static_assertions::const_assert;
 
 /// Smallest sized integer type that can fit an op code.
 pub type RawOpCode = u8;
@@ -18,38 +19,34 @@ pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
                                   // just smallest thing that can fit; this is
                                   // the actual number of bits, which may be
                                   // less.
+const_assert!(OPCODE_BITS <= RawOpCode::BITS as usize);
 
 /// Bits for immediate value.
 pub const IMM_BITS: usize = 16;
+const_assert!(IMM_BITS <= Immediate::BITS as usize);
 
 /// Bits for extended immediate value.
 pub const IMM_EXT_BITS: usize = 24;
+const_assert!(IMM_EXT_BITS <= ExtendedImmediate::BITS as usize);
 
 #[rustfmt::skip]
 mod encoding_spec {
-     use super::*;
-     use static_assertions::const_assert;
+    use super::*;
 
-     macro_rules! bits {
-         ($T:ty) => {
-             (8 * std::mem::size_of::<$T>())
-         };
-     }
-
-//   +---------------------------------------------------------------------------------+
-//   | Encodings (inspired by Lua). `Op`s fit in one `Word`.                           |
-//   +---------------------------------------------------------------------------------+
-//   | ABC (3 addresses):                                                              |
-       const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= bits![Word]); 
-//   | AB (2 addresses):                                                               |
-       const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= bits![Word]); 
-//   | AI (address + immediate)                                                        |
-       const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= bits![Word]); 
-//   | IX (extended immediate)                                                         |
-       const_assert!(OPCODE_BITS + IMM_EXT_BITS <= bits![Word]);
-//   | N (no operands)                                                                 | 
-       const_assert!(OPCODE_BITS <= bits![Word]);
-//   +---------------------------------------------------------------------------------+
+//  +------------------------------------------------------------------------------------+
+//  | Encodings (inspired by Lua). `Op`s fit in one `Word`.                              |
+//  +------------------------------------------------------------------------------------+
+//  | ABC (3 addresses):                                                                 |
+      const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+//  | AB (2 addresses):                                                                  |
+      const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+//  | AI (address + immediate)                                                           |
+      const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= Word::BITS as usize); 
+//  | IX (extended immediate)                                                            |
+      const_assert!(OPCODE_BITS + IMM_EXT_BITS <= Word::BITS as usize);
+//  | N (no operands)                                                                    | 
+      const_assert!(OPCODE_BITS <= Word::BITS as usize);
+//  +------------------------------------------------------------------------------------+
 }
 
 /// A VM operation.
@@ -164,6 +161,10 @@ impl Op {
         let ix = args & bitmask(IMM_EXT_BITS);
         Some(f(ix as ExtendedImmediate))
     }
+}
+
+pub const fn bitmask(bits: usize) -> Word {
+    ((1 as Word) << bits).wrapping_sub(1)
 }
 
 #[cfg(test)]
