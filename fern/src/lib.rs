@@ -4,5 +4,4 @@
 
 pub mod arch;
 pub mod op;
-pub mod program;
 pub mod vm;
