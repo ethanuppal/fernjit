@@ -9,7 +9,7 @@ use static_assertions::const_assert;
 pub type RawOpCode = u8;
 
 /// Smallest sized integer type that can fit a local address.
-pub type LocalAddress = u8;
+pub type Address = u8;
 
 /// Smallest sized integer type that can fit an immediate value.
 pub type Immediate = u16;
@@ -25,8 +25,8 @@ pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
 const_assert!(OPCODE_BITS <= RawOpCode::BITS as usize);
 
 /// Bits for local address.
-pub const LOCAL_ADDRESS_BITS: usize = 8;
-const_assert!(LOCAL_ADDRESS_BITS <= LocalAddress::BITS as usize);
+pub const ADDRESS_BITS: usize = 8;
+const_assert!(ADDRESS_BITS <= Address::BITS as usize);
 
 /// Bits for immediate value.
 pub const IMM_BITS: usize = 16;
@@ -44,11 +44,11 @@ mod encoding_spec {
 //  | Encodings (inspired by Lua). `Op`s fit in one `Word`.                              |
 //  +------------------------------------------------------------------------------------+
 //  | ABC (3 addresses):                                                                 |
-      const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+      const_assert!(OPCODE_BITS + 3 * ADDRESS_BITS <= Word::BITS as usize); 
 //  | AB (2 addresses):                                                                  |
-      const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+      const_assert!(OPCODE_BITS + 2 * ADDRESS_BITS <= Word::BITS as usize); 
 //  | AI (address + immediate)                                                           |
-      const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= Word::BITS as usize); 
+      const_assert!(OPCODE_BITS + ADDRESS_BITS + IMM_BITS <= Word::BITS as usize); 
 //  | IX (extended immediate)                                                            |
       const_assert!(OPCODE_BITS + IMM_EXT_BITS <= Word::BITS as usize);
 //  | N (no operands)                                                                    | 
@@ -61,15 +61,19 @@ mod encoding_spec {
 #[enum_tags(private, repr(RawOpCode))]
 pub enum Op {
     /// `Self::Mov(a, b)` copies the contents at address `b` to `a`.
-    Mov(LocalAddress, LocalAddress),
+    Mov(Address, Address),
     /// `Self::MovI(a, i)` loads `i` at address `a`.
-    MovI(LocalAddress, Immediate),
+    MovI(Address, Immediate),
     /// `Self::Add(a, b, c)` loads the sum of the contents at addresses `b` and
     /// `c`  at address `a`.
-    Add(LocalAddress, LocalAddress, LocalAddress),
+    Add(Address, Address, Address),
     /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
     /// VM function, pushing a new call frame.
     Call(ExtendedImmediate),
+    /// `Self::Jump(ix)` jumps to the instruction within the current VM
+    /// function offset by `ix`. `ix` is treated as an `IMM_EXT_BITS`-bit
+    /// twos-complement integer.
+    Jump(ExtendedImmediate),
     /// `Self::Ret` restores the previous call frame and restores the
     /// instruction pointer.
     Ret,
@@ -85,6 +89,7 @@ impl Op {
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Add(a, b, c) => Self::encode_packed_abc_args(a, b, c),
             Self::Call(ix) => Self::encode_packed_ix_args(ix),
+            Self::Jump(ix) => Self::encode_packed_ix_args(ix),
             Self::Ret | Self::Nop => 0,
         };
 
@@ -110,51 +115,50 @@ impl Op {
         self.tag()
     }
 
-    const fn encode_packed_ab_args(a: LocalAddress, b: LocalAddress) -> Word {
-        (a as Word) | ((b as Word) << LOCAL_ADDRESS_BITS)
+    const fn encode_packed_ab_args(a: Address, b: Address) -> Word {
+        (a as Word) | ((b as Word) << ADDRESS_BITS)
     }
 
     fn decode_packed_ab_args(
         args: Word,
-        f: impl FnOnce(LocalAddress, LocalAddress) -> Self,
+        f: impl FnOnce(Address, Address) -> Self,
     ) -> Option<Self> {
-        let a = args & bitmask(LOCAL_ADDRESS_BITS);
-        let b = (args >> LOCAL_ADDRESS_BITS) & bitmask(LOCAL_ADDRESS_BITS);
-        Some(f(a as LocalAddress, b as LocalAddress))
+        let a = args & bitmask(ADDRESS_BITS);
+        let b = (args >> ADDRESS_BITS) & bitmask(ADDRESS_BITS);
+        Some(f(a as Address, b as Address))
     }
 
     const fn encode_packed_abc_args(
-        a: LocalAddress,
-        b: LocalAddress,
-        c: LocalAddress,
+        a: Address,
+        b: Address,
+        c: Address,
     ) -> Word {
         (a as Word)
-            | ((b as Word) << LOCAL_ADDRESS_BITS)
-            | ((c as Word) << (2 * LOCAL_ADDRESS_BITS))
+            | ((b as Word) << ADDRESS_BITS)
+            | ((c as Word) << (2 * ADDRESS_BITS))
     }
 
     fn decode_packed_abc_args(
         args: Word,
-        f: impl FnOnce(LocalAddress, LocalAddress, LocalAddress) -> Self,
+        f: impl FnOnce(Address, Address, Address) -> Self,
     ) -> Option<Self> {
-        let a = args & bitmask(LOCAL_ADDRESS_BITS);
-        let b = (args >> LOCAL_ADDRESS_BITS) & bitmask(LOCAL_ADDRESS_BITS);
-        let c =
-            (args >> (2 * LOCAL_ADDRESS_BITS)) & bitmask(LOCAL_ADDRESS_BITS);
-        Some(f(a as LocalAddress, b as LocalAddress, c as LocalAddress))
+        let a = args & bitmask(ADDRESS_BITS);
+        let b = (args >> ADDRESS_BITS) & bitmask(ADDRESS_BITS);
+        let c = (args >> (2 * ADDRESS_BITS)) & bitmask(ADDRESS_BITS);
+        Some(f(a as Address, b as Address, c as Address))
     }
 
-    const fn encode_packed_ai_args(a: LocalAddress, i: Immediate) -> Word {
-        (a as Word) | ((i as Word) << LOCAL_ADDRESS_BITS)
+    const fn encode_packed_ai_args(a: Address, i: Immediate) -> Word {
+        (a as Word) | ((i as Word) << ADDRESS_BITS)
     }
 
     fn decode_packed_ai_args(
         args: Word,
-        f: impl FnOnce(LocalAddress, Immediate) -> Self,
+        f: impl FnOnce(Address, Immediate) -> Self,
     ) -> Option<Self> {
-        let a = args & bitmask(LOCAL_ADDRESS_BITS);
-        let i = (args >> LOCAL_ADDRESS_BITS) & bitmask(IMM_BITS);
-        Some(f(a as LocalAddress, i as Immediate))
+        let a = args & bitmask(ADDRESS_BITS);
+        let i = (args >> ADDRESS_BITS) & bitmask(IMM_BITS);
+        Some(f(a as Address, i as Immediate))
     }
 
     const fn encode_packed_ix_args(ix: ExtendedImmediate) -> Word {
@@ -178,7 +182,7 @@ pub const fn bitmask(bits: usize) -> Word {
 mod tests {
     use crate::{
         arch::Word,
-        op::{Op, LOCAL_ADDRESS_BITS, OPCODE_BITS},
+        op::{Op, ADDRESS_BITS, OPCODE_BITS},
     };
 
     #[test]
@@ -186,7 +190,7 @@ mod tests {
         assert_eq!(0, Op::Mov(0, 0).encode_packed());
         assert_eq!(1, Op::MovI(0, 0).encode_packed());
         assert_eq!(
-            (1 << OPCODE_BITS) | (1 << (OPCODE_BITS + LOCAL_ADDRESS_BITS)),
+            (1 << OPCODE_BITS) | (1 << (OPCODE_BITS + ADDRESS_BITS)),
             Op::Mov(1, 1).encode_packed()
         );
         assert_eq!(Op::Ret.opcode() as Word, Op::Ret.encode_packed());

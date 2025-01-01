@@ -1,14 +1,27 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
-use std::vec;
+use static_assertions::const_assert;
+use std::{ops::Range, vec};
 
 use crate::{
-    arch::{
-        FunctionId, InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS,
-        LOCALS_COUNT, RETURN_LOCALS,
-    },
+    arch::Word,
+    op,
     op::{Op, IMM_BITS},
 };
+
+type FunctionId = usize;
+type InstructionAddress = usize;
+type InstructionOffset = isize;
+type LocalAddress = u8;
+
+const LOCALS_COUNT: usize = 256;
+const_assert!(LOCALS_COUNT <= LocalAddress::MAX as usize + 1);
+
+const ARGUMENT_LOCALS: Range<usize> = 0..8;
+const_assert!(ARGUMENT_LOCALS.end <= LOCALS_COUNT);
+
+const RETURN_LOCALS: Range<usize> = 0..2;
+const_assert!(RETURN_LOCALS.end <= LOCALS_COUNT);
 
 pub struct VM {
     functions: Vec<VMFunction>,
@@ -24,7 +37,9 @@ struct VMFunction {
 #[derive(Debug)]
 pub enum VMError {
     InvalidArgs,
-    InvalidIP,
+    InvalidFunctionId,
+    InvalidInstructionAddress,
+    InvalidJumpOffset,
     InvalidLocalAddress,
 }
 
@@ -64,15 +79,9 @@ impl VM {
             // this return address doesn't matter because execution stops
             // when this frame is popped
             call_stack: vec![StackFrame::new_returning_to(
-                InstructionPointer {
-                    func: FunctionId::new(0),
-                    instr: InstructionAddress::new(0),
-                },
+                InstructionPointer { func: 0, instr: 0 },
             )],
-            ip: InstructionPointer {
-                func: FunctionId::new(0),
-                instr: InstructionAddress::new(0),
-            },
+            ip: InstructionPointer { func: 0, instr: 0 },
         }
     }
 
@@ -87,34 +96,28 @@ impl VM {
     fn step(&mut self) -> VMResult {
         match self.decode_op() {
             Op::Mov(to, from) => {
-                let to_addr = LocalAddress::new(to)
-                    .ok_or(VMError::InvalidLocalAddress)?;
-                let from_addr = LocalAddress::new(from)
-                    .ok_or(VMError::InvalidLocalAddress)?;
+                let to_addr = self.validate_local_address(to)?;
+                let from_addr = self.validate_local_address(from)?;
 
                 self.write_local(to_addr, self.read_local(from_addr));
-                self.jump_within_function(self.ip.instr.next())
+                self.jump_within_function(self.ip.instr + 1)
             }
             Op::MovI(to, constant) => {
-                let to_addr = LocalAddress::new(to)
-                    .ok_or(VMError::InvalidLocalAddress)?;
+                let to_addr = self.validate_local_address(to)?;
                 let extended: Word = sign_extend_to(constant, IMM_BITS);
 
                 self.write_local(to_addr, extended);
-                self.jump_within_function(self.ip.instr.next())
+                self.jump_within_function(self.ip.instr + 1)
             }
             Op::Add(to, first, second) => {
-                let to_addr = LocalAddress::new(to)
-                    .ok_or(VMError::InvalidLocalAddress)?;
-                let first_addr = LocalAddress::new(first)
-                    .ok_or(VMError::InvalidLocalAddress)?;
-                let second_addr = LocalAddress::new(second)
-                    .ok_or(VMError::InvalidLocalAddress)?;
+                let to_addr = self.validate_local_address(to)?;
+                let first_addr = self.validate_local_address(first)?;
+                let second_addr = self.validate_local_address(second)?;
 
                 let sum =
                     self.read_local(first_addr) + self.read_local(second_addr);
                 self.write_local(to_addr, sum);
-                self.jump_within_function(self.ip.instr.next())
+                self.jump_within_function(self.ip.instr + 1)
             }
             Op::Ret => {
                 let callee_frame = self.call_stack.pop().expect(
@@ -130,12 +133,12 @@ impl VM {
                 self.jump_to(return_address)
             }
             Op::Call(ix) => {
-                let func_id = FunctionId::new(ix as usize); // zero extension
+                let func_id = self.validate_function_id(ix)?;
 
                 let mut callee_frame =
                     StackFrame::new_returning_to(InstructionPointer {
                         func: self.ip.func,
-                        instr: self.ip.instr.next(),
+                        instr: self.ip.instr + 1,
                     });
                 callee_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
                     &self.current_frame().locals[ARGUMENT_LOCALS],
@@ -144,6 +147,15 @@ impl VM {
 
                 self.jump_to_function(func_id)
             }
+            Op::Jump(ix) => {
+                let offset = self.make_instruction_offset(ix);
+                let current_instr = self.ip.instr;
+                let new_instr = current_instr
+                    .checked_add_signed(offset)
+                    .ok_or(VMError::InvalidJumpOffset)?;
+
+                self.jump_within_function(new_instr)
+            }
             Op::Nop => Ok(()),
         }?;
 
@@ -151,17 +163,52 @@ impl VM {
     }
 
     fn decode_op(&self) -> Op {
-        let word = self.functions[self.ip.func.as_usize()].code
-            [self.ip.instr.as_usize()];
+        let word = self.functions[self.ip.func].code[self.ip.instr];
         Op::decode_packed(word).unwrap()
     }
 
+    /// Validates an encoded local address. If the address is valid,
+    /// the returned [`LocalAddress`] is guaranteed to be a valid index
+    /// into the locals array.
+    fn validate_local_address(
+        &self,
+        addr: op::Address,
+    ) -> Result<LocalAddress, VMError> {
+        if (addr as usize) < LOCALS_COUNT {
+            Ok(addr)
+        } else {
+            Err(VMError::InvalidLocalAddress)
+        }
+    }
+
+    /// Validates a function ID. If the ID is valid, the returned [`FunctionId`]
+    /// is guaranteed to be a valid index into the functions array.
+    fn validate_function_id(
+        &self,
+        ix: op::ExtendedImmediate,
+    ) -> Result<FunctionId, VMError> {
+        if (ix as usize) < self.functions.len() {
+            Ok(ix as usize) // zero extension
+        } else {
+            Err(VMError::InvalidFunctionId)
+        }
+    }
+
+    /// Creates an [`InstructionOffset`] from an [`op::ExtendedImmediate`] `ix`,
+    /// where `ix` is an `IMM_EXT_BITS`-bit twos complement integer.
+    fn make_instruction_offset(
+        &self,
+        offset: op::ExtendedImmediate,
+    ) -> InstructionOffset {
+        let sign_extended: usize = sign_extend_to(offset, IMM_BITS);
+        sign_extended as isize
+    }
+
     fn jump_to(&mut self, new_ip: InstructionPointer) -> VMResult {
-        if new_ip.func.as_usize() >= self.functions.len()
-            || new_ip.instr.as_usize()
-                >= self.functions[new_ip.func.as_usize()].code.len()
-        {
-            Err(VMError::InvalidIP)
+        if new_ip.func >= self.functions.len() {
+            Err(VMError::InvalidFunctionId)
+        } else if new_ip.instr >= self.functions[new_ip.func].code.len() {
+            Err(VMError::InvalidInstructionAddress)
         } else {
             self.ip = new_ip;
             Ok(())
@@ -169,10 +216,7 @@ impl VM {
     }
 
     fn jump_to_function(&mut self, func: FunctionId) -> VMResult {
-        self.jump_to(InstructionPointer {
-            func,
-            instr: InstructionAddress::new(0),
-        })
+        self.jump_to(InstructionPointer { func, instr: 0 })
     }
 
     fn jump_within_function(&mut self, instr: InstructionAddress) -> VMResult {
@@ -183,11 +227,11 @@ impl VM {
     }
 
     fn read_local(&self, address: LocalAddress) -> Word {
-        self.current_frame().locals[address.as_usize()]
+        self.current_frame().locals[address as usize]
     }
 
     fn write_local(&mut self, address: LocalAddress, value: Word) {
-        self.current_frame_mut().locals[address.as_usize()] = value;
+        self.current_frame_mut().locals[address as usize] = value;
     }
 
     fn current_frame(&self) -> &StackFrame {
