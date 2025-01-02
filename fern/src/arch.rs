@@ -6,6 +6,7 @@ pub type Word = u32;
 
 pub type FunctionId = usize;
 pub type InstructionAddress = usize;
+pub type InstructionOffset = isize;
 pub type LocalAddress = u8;
 
 pub const LOCAL_ADDRESS_BITS: usize = 8;
