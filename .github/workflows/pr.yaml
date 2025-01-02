@@ -10,6 +10,6 @@ jobs:
   title-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: npm install --no-save @commitlint/config-conventional
-      - uses: satellytes/commitlint-pr-title@v1
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
