@@ -63,10 +63,6 @@ pub enum Op {
     /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
     /// VM function, pushing a new call frame.
     Call(ExtendedImmediate),
-    /// `Self::Jump(ix)` jumps to the instruction within the current VM
-    /// function offset by `ix`. `ix` is treated as an `IMM_EXT_BITS`-bit
-    /// twos-complement integer.
-    Jump(ExtendedImmediate),
     /// `Self::Ret` restores the previous call frame and restores the
     /// instruction pointer.
     Ret,
@@ -82,7 +78,6 @@ impl Op {
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Add(a, b, c) => Self::encode_packed_abc_args(a, b, c),
             Self::Call(ix) => Self::encode_packed_ix_args(ix),
-            Self::Jump(ix) => Self::encode_packed_ix_args(ix),
             Self::Ret | Self::Nop => 0,
         };
 

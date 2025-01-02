@@ -2,10 +2,10 @@
 
 use crate::{
     arch::{
-        FunctionId, InstructionAddress, InstructionOffset, LocalAddress, Word,
-        ARGUMENT_LOCALS, LOCALS_COUNT, RETURN_LOCALS,
+        FunctionId, InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS,
+        LOCALS_COUNT, RETURN_LOCALS,
     },
-    op::{ExtendedImmediate, Op, IMM_BITS},
+    op::{Op, IMM_BITS},
 };
 
 pub struct VM {
@@ -120,15 +120,6 @@ impl VM {
 
                 self.jump_to_function(func_id)
             }
-            Op::Jump(ix) => {
-                let offset = make_instruction_offset(ix);
-                let current_instr = self.ip.instr;
-                let new_instr = current_instr
-                    .checked_add_signed(offset)
-                    .ok_or(VMError::InvalidJumpOffset)?;
-
-                self.jump_within_function(new_instr)
-            }
             Op::Nop => Ok(()),
         }?;
 
@@ -237,14 +228,6 @@ impl DecodedFunction {
             body: self.body.iter().map(Op::encode_packed).collect(),
         }
     }
-}
-
-/// Creates an [`InstructionOffset`] from an [`ExtendedImmediate`]
-/// `offset`, where `offset` is an `IMM_EXT_BITS`-bit twos complement
-/// integer.
-fn make_instruction_offset(offset: ExtendedImmediate) -> InstructionOffset {
-    let sign_extended: usize = sign_extend_to(offset, IMM_BITS);
-    sign_extended as InstructionOffset
 }
 
 fn sign_extend_to<
