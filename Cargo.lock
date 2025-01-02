@@ -29,6 +29,7 @@ name = "fern-vm"
 version = "0.0.0"
 dependencies = [
  "fern-enum-tags",
+ "num-traits",
  "paste",
  "static_assertions",
 ]
