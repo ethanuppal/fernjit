@@ -2,8 +2,13 @@
 # currently a hack until I get it working on Apple Silicon
 
 UNAME := $(shell uname)
+
 ifeq ($(UNAME), Darwin)
-PREFIX := rustup run stable-x86_64-apple-darwin
+	RUST_PREFIX := rustup run stable-x86_64-apple-darwin
+endif
+
+ifeq ($(UNAME), Darwin)
+	NATIVE_PREFIX := arch -x86_64 
 endif
 
 .PHONY: test_native
@@ -15,22 +20,24 @@ deps:
 ifeq ($(UNAME), Darwin)
 	rustup toolchain install stable-x86_64-apple-darwin
 endif
+	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+	cargo binstall cargo-tarpaulin
 
 .PHONY: test
 test:
-	$(PREFIX) cargo test
+	$(RUST_PREFIX) cargo test
+
+.PHONY: test_cov_vm
+test_cov_vm:
+	$(RUST_PREFIX) cargo tarpaulin -p fern-vm --coveralls $(COVERALLS)
 
 .PHONY: build
 build:
-	$(PREFIX) cargo build
+	$(RUST_PREFIX) cargo build
 
 .PHONY: run
 run: build
-ifeq ($(UNAME), Darwin)
-	arch -x86_64 target/debug/fernjit
-else
-	target/debug/fernjit
-endif
+	$(NATIVE_PREFIX) target/debug/fernjit
 
 .PHONY: asm
 asm:
