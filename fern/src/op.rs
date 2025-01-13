@@ -2,7 +2,8 @@
 
 use enum_tags::enum_tags;
 
-use crate::arch::{bitmask, LocalAddress, Word, LOCAL_ADDRESS_BITS};
+use crate::arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS};
+use static_assertions::const_assert;
 
 /// Smallest sized integer type that can fit an op code.
 pub type RawOpCode = u8;
@@ -16,40 +17,36 @@ pub type ExtendedImmediate = u32;
 /// Bits for opcode.
 pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
                                   // just smallest thing that can fit; this is
-                                  // the eactual number of bits, which may be
+                                  // the actual number of bits, which may be
                                   // less.
+const_assert!(OPCODE_BITS <= RawOpCode::BITS as usize);
 
 /// Bits for immediate value.
 pub const IMM_BITS: usize = 16;
+const_assert!(IMM_BITS <= Immediate::BITS as usize);
 
 /// Bits for extended immediate value.
 pub const IMM_EXT_BITS: usize = 24;
+const_assert!(IMM_EXT_BITS <= ExtendedImmediate::BITS as usize);
 
 #[rustfmt::skip]
 mod encoding_spec {
-     use super::*;
-     use static_assertions::{const_assert, const_assert_eq};
+    use super::*;
 
-     macro_rules! bits {
-         ($T:ty) => {
-             (8 * std::mem::size_of::<$T>())
-         };
-     }
-
-//   +---------------------------------------------------------------------------------+
-//   | Encodings (inspired by Lua). `Op`s fit in one `Word`.                           |
-//   +---------------------------------------------------------------------------------+
-//   | ABC (3 addresses):                                                              |
-       const_assert_eq!(bits![Word], OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS); 
-//   | AB (2 addresses):                                                               |
-       const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= bits![Word]); 
-//   | AI (address + immediate)                                                        |
-       const_assert_eq!(bits![Word], OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS); 
-//   | IX (extended immediate)                                                         |
-       const_assert_eq!(bits![Word], OPCODE_BITS + IMM_EXT_BITS);
-//   | N (no operands)                                                                 | 
-       const_assert!(OPCODE_BITS <= bits![Word]);
-//   +---------------------------------------------------------------------------------+
+//  +------------------------------------------------------------------------------------+
+//  | Encodings (inspired by Lua). `Op`s fit in one `Word`.                              |
+//  +------------------------------------------------------------------------------------+
+//  | ABC (3 addresses):                                                                 |
+      const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+//  | AB (2 addresses):                                                                  |
+      const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+//  | AI (address + immediate)                                                           |
+      const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= Word::BITS as usize); 
+//  | IX (extended immediate)                                                            |
+      const_assert!(OPCODE_BITS + IMM_EXT_BITS <= Word::BITS as usize);
+//  | N (no operands)                                                                    | 
+      const_assert!(OPCODE_BITS <= Word::BITS as usize);
+//  +------------------------------------------------------------------------------------+
 }
 
 /// A VM operation.
@@ -63,9 +60,16 @@ pub enum Op {
     /// `Self::Add(a, b, c)` loads the sum of the contents at addresses `b` and
     /// `c`  at address `a`.
     Add(LocalAddress, LocalAddress, LocalAddress),
+    /// `Self::Sub(a, b, c)` loads the difference of the contents at addresses
+    /// `b` and `c` at address `a`.
+    Sub(LocalAddress, LocalAddress, LocalAddress),
     /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
-    /// code instruction, pushing a new call frame.
+    /// VM function, pushing a new call frame.
     Call(ExtendedImmediate),
+    /// `Self::Bnz(a, i)` jumps to the instruction within the current VM
+    /// function offset by `i` if the contents at address `a` are not zero.
+    /// `i` is treated as an `IMM_BITS`-bit twos-complement integer.
+    Bnz(LocalAddress, Immediate),
     /// `Self::Ret` restores the previous call frame and restores the
     /// instruction pointer.
     Ret,
@@ -80,7 +84,9 @@ impl Op {
             Self::Mov(a, b) => Self::encode_packed_ab_args(a, b),
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Add(a, b, c) => Self::encode_packed_abc_args(a, b, c),
+            Self::Sub(a, b, c) => Self::encode_packed_abc_args(a, b, c),
             Self::Call(ix) => Self::encode_packed_ix_args(ix),
+            Self::Bnz(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Ret | Self::Nop => 0,
         };
 
@@ -95,7 +101,9 @@ impl Op {
             Self::MOV_TAG => Self::decode_packed_ab_args(args, Self::Mov),
             Self::MOVI_TAG => Self::decode_packed_ai_args(args, Self::MovI),
             Self::ADD_TAG => Self::decode_packed_abc_args(args, Self::Add),
+            Self::SUB_TAG => Self::decode_packed_abc_args(args, Self::Sub),
             Self::CALL_TAG => Self::decode_packed_ix_args(args, Self::Call),
+            Self::BNZ_TAG => Self::decode_packed_ai_args(args, Self::Bnz),
             Self::RET_TAG => Some(Self::Ret),
             Self::NOP_TAG => Some(Self::Nop),
             _ => None,
@@ -166,11 +174,15 @@ impl Op {
     }
 }
 
+pub const fn bitmask(bits: usize) -> Word {
+    ((1 as Word) << bits).wrapping_sub(1)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        arch::{Word, LOCAL_ADDRESS_BITS},
-        op::{Op, OPCODE_BITS},
+        arch::Word,
+        op::{Op, LOCAL_ADDRESS_BITS, OPCODE_BITS},
     };
 
     #[test]
