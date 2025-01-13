@@ -179,7 +179,7 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use super::VM;
-    use crate::op::{ExtendedImmediate, Op};
+    use crate::op::Op;
 
     #[test]
     fn basic_program() {
