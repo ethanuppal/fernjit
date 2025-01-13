@@ -28,7 +28,7 @@ test:
 
 .PHONY: test_cov_vm
 test_cov_vm:
-	$(RUST_PREFIX) cargo tarpaulin -p fern --coveralls $(COVERALLS)
+	$(RUST_PREFIX) cargo tarpaulin -p fern-vm --coveralls $(COVERALLS)
 
 .PHONY: build
 build:
