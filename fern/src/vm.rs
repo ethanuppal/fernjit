@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
-use std::vec;
+use std::{usize, vec};
 
 use crate::{
     arch::{
@@ -58,12 +58,31 @@ impl Default for VM {
 }
 
 impl VM {
-    /// Adds a function to the [`VM`]. [`FunctionId`]s are sequential, starting
-    /// from 0. Function 0 is always the entrypoint.
-    pub fn add_function(&mut self, function_code: Vec<Word>) {
+    /// Creates a VM function, returning a [`FunctionId`] that can be used to
+    /// refer to it.
+    pub fn create_function(&mut self) -> FunctionId {
+        self.functions.push(VMFunction {
+            start_addr: usize::MAX,
+        });
+        self.functions.len() - 1
+    }
+
+    /// Sets the bytecode for a `function_id`.
+    pub fn set_function_code(
+        &mut self,
+        function_id: FunctionId,
+        function_code: Vec<Word>,
+    ) {
+        assert!(
+            function_id < self.functions.len(),
+            "Invalid function ID {}. Valid function IDs are up to (but not including) {}.",
+            function_id,
+            self.functions.len()
+        );
+
         let start_addr = self.code.len();
         self.code.extend(function_code);
-        self.functions.push(VMFunction { start_addr });
+        self.functions[function_id] = VMFunction { start_addr }
     }
 
     /// Runs the [`VM`] until the call stack is empty. Execution begins at the
@@ -189,7 +208,10 @@ fn sign_extend_to<
 
 #[cfg(test)]
 mod tests {
-    use crate::{op::Op, vm::VM};
+    use crate::{
+        op::{ExtendedImmediate, Op},
+        vm::VM,
+    };
 
     fn encode_func(ops: Vec<Op>) -> Vec<u32> {
         ops.into_iter().map(|op| op.encode_packed()).collect()
@@ -198,9 +220,11 @@ mod tests {
     #[test]
     fn basic_program() {
         let mut vm = VM::default();
+
+        let main_id = vm.create_function();
         let main =
             vec![Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret];
-        vm.add_function(encode_func(main));
+        vm.set_function_code(main_id, encode_func(main));
 
         for _ in 0..3 {
             vm.step().expect("program should run without errors")
@@ -218,16 +242,19 @@ mod tests {
     fn call_return() {
         let mut vm = VM::default();
 
+        let main_id = vm.create_function();
+        let add_id = vm.create_function();
+
         let main = vec![
             Op::MovI(0, 1),
             Op::MovI(1, 2),
-            Op::Call(1), // call add
+            Op::Call(add_id as ExtendedImmediate), // call add
             Op::Ret,
         ];
-        vm.add_function(encode_func(main));
+        vm.set_function_code(main_id, encode_func(main));
 
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
-        vm.add_function(encode_func(add));
+        vm.set_function_code(add_id, encode_func(add));
 
         for _ in 0..5 {
             vm.step().expect("program should run without errors");
@@ -244,22 +271,26 @@ mod tests {
     fn call_multiple() {
         let mut vm = VM::default();
 
+        let main_id = vm.create_function();
+        let add_id = vm.create_function();
+        let double_id = vm.create_function();
+
         let main = vec![
             Op::MovI(0, 3),
-            Op::Call(2), // call double
+            Op::Call(double_id as ExtendedImmediate), // call double
             Op::Ret,
         ];
-        vm.add_function(encode_func(main));
+        vm.set_function_code(main_id, encode_func(main));
 
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
-        vm.add_function(encode_func(add));
+        vm.set_function_code(add_id, encode_func(add));
 
         let double = vec![
             Op::Mov(1, 0),
-            Op::Call(1), // call add
+            Op::Call(add_id as ExtendedImmediate), // call add
             Op::Ret,
         ];
-        vm.add_function(encode_func(double));
+        vm.set_function_code(double_id, encode_func(double));
 
         for _ in 0..7 {
             vm.step().expect("program should run without errors");
