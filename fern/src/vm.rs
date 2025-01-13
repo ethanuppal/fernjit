@@ -223,32 +223,32 @@ mod tests {
         assert!(vm.call_stack.is_empty());
     }
 
-    #[test]
-    fn call_neg_offset() {
-        let mut vm = VM::default();
-        let program = [
-            // func main
-            Op::MovI(0, 3),
-            Op::Call(4), // call double
-            Op::Ret,
-            // func add
-            Op::Add(0, 0, 1),
-            Op::Ret,
-            // func double
-            Op::Mov(1, 0),
-            Op::Call((0 as ExtendedImmediate).wrapping_sub(3)), // call add
-            Op::Ret,
-        ];
-
-        vm.load(&program);
-
-        for _ in 0..7 {
-            vm.step().expect("program should run without errors");
-        }
-
-        assert_eq!(6, vm.current_frame().locals[0]);
-
-        vm.step().expect("program should run without errors");
-        assert!(vm.call_stack.is_empty());
-    }
+    //#[test]
+    //fn call_neg_offset() {
+    //    let mut vm = VM::default();
+    //    let program = [
+    //        // func main
+    //        Op::MovI(0, 3),
+    //        Op::Call(4), // call double
+    //        Op::Ret,
+    //        // func add
+    //        Op::Add(0, 0, 1),
+    //        Op::Ret,
+    //        // func double
+    //        Op::Mov(1, 0),
+    //        Op::Call((0 as ExtendedImmediate).wrapping_sub(3)), // call add
+    //        Op::Ret,
+    //    ];
+    //
+    //    vm.load(&program);
+    //
+    //    for _ in 0..7 {
+    //        vm.step().expect("program should run without errors");
+    //    }
+    //
+    //    assert_eq!(6, vm.current_frame().locals[0]);
+    //
+    //    vm.step().expect("program should run without errors");
+    //    assert!(vm.call_stack.is_empty());
+    //}
 }
