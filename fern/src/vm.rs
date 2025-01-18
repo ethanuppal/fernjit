@@ -12,14 +12,13 @@ use crate::{
 
 pub struct VM {
     code: Vec<Word>,
-    functions: Vec<VMFunction>,
+    functions: Vec<InstructionAddress>,
     call_stack: Vec<StackFrame>,
     ip: InstructionAddress,
 }
 
-struct VMFunction {
-    start_addr: InstructionAddress,
-}
+/// Used to mark uninitialized functions in `VM::functions`
+const UNINITIALIZED_FUNCTION: InstructionAddress = InstructionAddress::MAX;
 
 #[derive(Debug)]
 pub enum VMError {
@@ -59,19 +58,20 @@ impl Default for VM {
 
 impl VM {
     /// Creates a VM function, returning a [`FunctionId`] that can be used to
-    /// refer to it.
+    /// refer to it. You must later assign code to the given function ID using
+    /// `initialize_function`.
     pub fn create_function(&mut self) -> FunctionId {
-        self.functions.push(VMFunction {
-            start_addr: usize::MAX,
-        });
+        self.functions.push(UNINITIALIZED_FUNCTION);
         self.functions.len() - 1
     }
 
-    /// Sets the bytecode for a `function_id`.
-    pub fn set_function_code(
+    /// Initializes the function with `function_id` with bytecode. `function_id`
+    /// must be an ID obtained from `create_function`, and must not have been
+    /// initialized previously.
+    pub fn initialize_function(
         &mut self,
         function_id: FunctionId,
-        function_code: Vec<Word>,
+        function_code: Box<[Word]>,
     ) {
         assert!(
             function_id < self.functions.len(),
@@ -80,9 +80,15 @@ impl VM {
             self.functions.len()
         );
 
+        assert!(
+            self.functions[function_id] == UNINITIALIZED_FUNCTION,
+            "Function {} has been initialized before.",
+            function_id
+        );
+
         let start_addr = self.code.len();
         self.code.extend(function_code);
-        self.functions[function_id] = VMFunction { start_addr }
+        self.functions[function_id] = start_addr
     }
 
     /// Runs the [`VM`] until the call stack is empty. Execution begins at the
@@ -159,13 +165,13 @@ impl VM {
         Ok(())
     }
 
-    fn jump_to_function(&mut self, func: FunctionId) -> VMResult {
-        if func >= self.functions.len() {
+    fn jump_to_function(&mut self, function_id: FunctionId) -> VMResult {
+        if function_id >= self.functions.len() {
             return Err(VMError::InvalidFunctionId);
         }
 
-        let start_addr = self.functions[func].start_addr;
-        self.jump_to(start_addr)
+        let start_address = self.functions[function_id];
+        self.jump_to(start_address)
     }
 
     fn read_local(&self, address: LocalAddress) -> Word {
@@ -224,7 +230,7 @@ mod tests {
         let main_id = vm.create_function();
         let main =
             vec![Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret];
-        vm.set_function_code(main_id, encode_func(main));
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
 
         for _ in 0..3 {
             vm.step().expect("program should run without errors")
@@ -251,10 +257,10 @@ mod tests {
             Op::Call(add_id as ExtendedImmediate), // call add
             Op::Ret,
         ];
-        vm.set_function_code(main_id, encode_func(main));
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
 
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
-        vm.set_function_code(add_id, encode_func(add));
+        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
 
         for _ in 0..5 {
             vm.step().expect("program should run without errors");
@@ -280,17 +286,20 @@ mod tests {
             Op::Call(double_id as ExtendedImmediate), // call double
             Op::Ret,
         ];
-        vm.set_function_code(main_id, encode_func(main));
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
 
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
-        vm.set_function_code(add_id, encode_func(add));
+        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
 
         let double = vec![
             Op::Mov(1, 0),
             Op::Call(add_id as ExtendedImmediate), // call add
             Op::Ret,
         ];
-        vm.set_function_code(double_id, encode_func(double));
+        vm.initialize_function(
+            double_id,
+            encode_func(double).into_boxed_slice(),
+        );
 
         for _ in 0..7 {
             vm.step().expect("program should run without errors");
