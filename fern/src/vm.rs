@@ -1,6 +1,6 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
-use std::{usize, vec};
+use std::vec;
 
 use crate::{
     arch::{
