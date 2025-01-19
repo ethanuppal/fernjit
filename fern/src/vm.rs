@@ -62,7 +62,7 @@ impl VM {
     /// `initialize_function`.
     pub fn create_function(&mut self) -> FunctionId {
         self.functions.push(UNINITIALIZED_FUNCTION);
-        self.functions.len() - 1
+        FunctionId(self.functions.len() - 1)
     }
 
     /// Initializes the function with `function_id` with bytecode. `function_id`
@@ -74,21 +74,21 @@ impl VM {
         function_code: Box<[Word]>,
     ) {
         assert!(
-            function_id < self.functions.len(),
+            function_id.0 < self.functions.len(),
             "Invalid function ID {}. Valid function IDs are up to (but not including) {}.",
-            function_id,
+            function_id.0,
             self.functions.len()
         );
 
         assert!(
-            self.functions[function_id] == UNINITIALIZED_FUNCTION,
+            self.functions[function_id.0] == UNINITIALIZED_FUNCTION,
             "Function {} has been initialized before.",
-            function_id
+            function_id.0
         );
 
         let start_addr = self.code.len();
         self.code.extend(function_code);
-        self.functions[function_id] = start_addr
+        self.functions[function_id.0] = start_addr
     }
 
     /// Runs the [`VM`] until the call stack is empty. Execution begins at the
@@ -134,7 +134,7 @@ impl VM {
                 self.jump_to(return_address)
             }
             Op::Call(ix) => {
-                let func_id = ix as FunctionId; // zero extension
+                let func_id = FunctionId(ix as usize); // zero extension
 
                 let mut callee_frame =
                     StackFrame::new_returning_to(self.ip + 1);
@@ -166,11 +166,11 @@ impl VM {
     }
 
     fn jump_to_function(&mut self, function_id: FunctionId) -> VMResult {
-        if function_id >= self.functions.len() {
+        if function_id.0 >= self.functions.len() {
             return Err(VMError::InvalidFunctionId);
         }
 
-        let start_address = self.functions[function_id];
+        let start_address = self.functions[function_id.0];
         self.jump_to(start_address)
     }
 
@@ -254,7 +254,7 @@ mod tests {
         let main = vec![
             Op::MovI(0, 1),
             Op::MovI(1, 2),
-            Op::Call(add_id as ExtendedImmediate), // call add
+            Op::Call(add_id.0 as ExtendedImmediate), // call add
             Op::Ret,
         ];
         vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
@@ -283,19 +283,22 @@ mod tests {
 
         let main = vec![
             Op::MovI(0, 3),
-            Op::Call(double_id as ExtendedImmediate), // call double
+            Op::Call(double_id.0 as ExtendedImmediate), // call double
             Op::Ret,
         ];
-        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
 
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
-        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
 
         let double = vec![
             Op::Mov(1, 0),
-            Op::Call(add_id as ExtendedImmediate), // call add
+            Op::Call(add_id.0 as ExtendedImmediate), // call add
             Op::Ret,
         ];
+
+        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
+
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
+
         vm.initialize_function(
             double_id,
             encode_func(double).into_boxed_slice(),

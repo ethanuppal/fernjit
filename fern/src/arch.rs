@@ -4,7 +4,9 @@ use std::ops::Range;
 
 pub type Word = u32;
 
-pub type FunctionId = usize;
+#[must_use]
+pub struct FunctionId(pub usize);
+
 pub type InstructionAddress = usize;
 pub type LocalAddress = u8;
 
