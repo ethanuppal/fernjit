@@ -1,6 +1,7 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
-use static_assertions::const_assert;
 use std::ops::Range;
+
+use static_assertions::const_assert;
 
 pub type Word = u32;
 
