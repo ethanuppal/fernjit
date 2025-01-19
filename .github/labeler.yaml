@@ -13,3 +13,7 @@
 "Infra: CI":
   - changed-files:
       - any-glob-to-any-file: ".github/workflows/*"
+      
+"Infra: Tooling":
+  - changed-files:
+      - any-glob-to-any-file: ["rustfmt.toml", "Makefile"]
