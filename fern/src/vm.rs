@@ -4,31 +4,32 @@ use std::vec;
 
 use crate::{
     arch::{
-        InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS, LOCALS_COUNT,
-        MAX_CODE_LENGTH, RETURN_LOCALS,
+        FunctionId, InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS,
+        LOCALS_COUNT, RETURN_LOCALS,
     },
-    op::{Op, IMM_BITS, IMM_EXT_BITS},
+    op::{Op, IMM_BITS},
 };
 
-fn sign_extend_to<
-    In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
-    Out: 'static + num_traits::Unsigned + Copy,
->(
-    value: In,
-    bits: usize,
-) -> Out {
-    let sign_bit = In::one() << (bits - 1);
-    if value & sign_bit != In::zero() {
-        let extension = !((In::one() << bits) - In::one());
-        value | extension
-    } else {
-        value
-    }
-    .as_()
+pub struct VM {
+    code: Vec<Word>,
+    functions: Vec<InstructionAddress>,
+    call_stack: Vec<StackFrame>,
+    ip: InstructionAddress,
 }
 
+/// Used to mark uninitialized functions in `VM::functions`
+const UNINITIALIZED_FUNCTION: InstructionAddress = InstructionAddress::MAX;
+
+#[derive(Debug)]
+pub enum VMError {
+    InvalidFunctionId,
+    InvalidInstructionAddress,
+    InvalidJumpOffset,
+}
+
+pub type VMResult = Result<(), VMError>;
+
 struct StackFrame {
-    // TODO: do we wnat this on the heap?
     locals: [Word; LOCALS_COUNT],
     return_address: InstructionAddress,
 }
@@ -42,51 +43,62 @@ impl StackFrame {
     }
 }
 
-pub struct VM {
-    code: Box<[Word]>,
-    code_length: InstructionAddress,
-    call_stack: Vec<StackFrame>,
-    ip: InstructionAddress,
-}
-
-#[derive(Debug)]
-pub enum VMError {
-    InvalidArgs,
-    InvalidIP,
-}
-
-pub type VMResult = Result<(), VMError>;
-
 impl Default for VM {
     fn default() -> Self {
         Self {
-            code: vec![0; MAX_CODE_LENGTH].into_boxed_slice(),
-            code_length: 0,
-            call_stack: vec![],
-            ip: 0,
+            code: vec![],
+            functions: vec![],
+            // this return address doesn't matter because execution stops
+            // when this frame is popped
+            call_stack: vec![StackFrame::new_returning_to(0)],
+            ip: UNINITIALIZED_FUNCTION, // expect user to call `set_entrypoint`
         }
     }
 }
 
 impl VM {
-    pub fn load(&mut self, program: &[Op]) {
-        // TODO: should this be an assertion or a `VMError`?
-        assert!(
-            program.len() <= MAX_CODE_LENGTH,
-            "program too large to load (length={}, max length={})",
-            program.len(),
-            MAX_CODE_LENGTH
-        );
-        for (i, op) in program.iter().enumerate() {
-            self.code[i] = op.encode_packed();
-        }
-        self.code_length = program.len();
-        self.call_stack.clear();
-        // this return address doesn't matter because execution stops when this
-        // frame is popped
-        self.call_stack.push(StackFrame::new_returning_to(0));
+    /// Creates a VM function, returning a [`FunctionId`] that can be used to
+    /// refer to it. You must later assign code to the given function ID using
+    /// `initialize_function`.
+    pub fn create_function(&mut self) -> FunctionId {
+        self.functions.push(UNINITIALIZED_FUNCTION);
+        FunctionId(self.functions.len() - 1)
     }
 
+    /// Initializes the function with `function_id` with bytecode. `function_id`
+    /// must be an ID obtained from `create_function`, and must not have been
+    /// initialized previously.
+    pub fn initialize_function(
+        &mut self,
+        function_id: FunctionId,
+        function_code: Box<[Word]>,
+    ) {
+        assert!(
+            function_id.0 < self.functions.len(),
+            "Invalid function ID {}. Valid function IDs are up to (but not including) {}.",
+            function_id.0,
+            self.functions.len()
+        );
+
+        assert!(
+            self.functions[function_id.0] == UNINITIALIZED_FUNCTION,
+            "Function {} has been initialized before.",
+            function_id.0
+        );
+
+        let start_addr = self.code.len();
+        self.code.extend(function_code);
+        self.functions[function_id.0] = start_addr
+    }
+
+    /// Sets the function to run when the VM starts. Must be called before
+    /// executing code using `run`.
+    pub fn set_entrypoint(&mut self, function: FunctionId) {
+        self.ip = self.functions[function.0]
+    }
+
+    /// Runs the [`VM`] until the call stack is empty. Execution begins at the
+    /// function provided in `set_entrypoint`.
     pub fn run(&mut self) -> VMResult {
         while !self.call_stack.is_empty() {
             self.step()?;
@@ -97,11 +109,15 @@ impl VM {
     fn step(&mut self) -> VMResult {
         match self.decode_op() {
             Op::Mov(to, from) => {
+                // note that we do not validate local addresses here
+                // it is not a VM responsibility to validate the program
+
                 self.write_local(to, self.read_local(from));
                 self.jump_to(self.ip + 1)
             }
             Op::MovI(to, constant) => {
-                let extended = sign_extend_to(constant, IMM_BITS);
+                let extended: Word = sign_extend_to(constant, IMM_BITS);
+
                 self.write_local(to, extended);
                 self.jump_to(self.ip + 1)
             }
@@ -123,9 +139,8 @@ impl VM {
 
                 self.jump_to(return_address)
             }
-            Op::Call(offset) => {
-                let new_ip =
-                    self.ip.wrapping_add(sign_extend_to(offset, IMM_EXT_BITS));
+            Op::Call(ix) => {
+                let func_id = FunctionId(ix as usize); // zero extension
 
                 let mut callee_frame =
                     StackFrame::new_returning_to(self.ip + 1);
@@ -134,7 +149,7 @@ impl VM {
                 );
                 self.call_stack.push(callee_frame);
 
-                self.jump_to(new_ip)
+                self.jump_to_function(func_id)
             }
             Op::Nop => Ok(()),
         }?;
@@ -143,16 +158,26 @@ impl VM {
     }
 
     fn decode_op(&self) -> Op {
-        Op::decode_packed(self.code[self.ip]).unwrap()
+        let word = self.code[self.ip];
+        Op::decode_packed(word).unwrap()
     }
 
-    fn jump_to(&mut self, new_ip: usize) -> VMResult {
-        if new_ip >= self.code_length {
-            Err(VMError::InvalidIP)
-        } else {
-            self.ip = new_ip;
-            Ok(())
+    fn jump_to(&mut self, instr: InstructionAddress) -> VMResult {
+        if instr >= self.code.len() {
+            return Err(VMError::InvalidInstructionAddress);
         }
+
+        self.ip = instr;
+        Ok(())
+    }
+
+    fn jump_to_function(&mut self, function_id: FunctionId) -> VMResult {
+        if function_id.0 >= self.functions.len() {
+            return Err(VMError::InvalidFunctionId);
+        }
+
+        let start_address = self.functions[function_id.0];
+        self.jump_to(start_address)
     }
 
     fn read_local(&self, address: LocalAddress) -> Word {
@@ -176,15 +201,43 @@ impl VM {
     }
 }
 
+fn sign_extend_to<
+    In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
+    Out: 'static + num_traits::Unsigned + Copy,
+>(
+    value: In,
+    bits: usize,
+) -> Out {
+    let sign_bit = In::one() << (bits - 1);
+    if value & sign_bit != In::zero() {
+        let extension = !((In::one() << bits) - In::one());
+        value | extension
+    } else {
+        value
+    }
+    .as_()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::VM;
-    use crate::op::Op;
+    use crate::{
+        op::{ExtendedImmediate, Op},
+        vm::VM,
+    };
+
+    fn encode_func(ops: Vec<Op>) -> Vec<u32> {
+        ops.into_iter().map(|op| op.encode_packed()).collect()
+    }
 
     #[test]
     fn basic_program() {
         let mut vm = VM::default();
-        vm.load(&[Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret]);
+
+        let main_id = vm.create_function();
+        let main =
+            vec![Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret];
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
+        vm.set_entrypoint(main_id);
 
         for _ in 0..3 {
             vm.step().expect("program should run without errors")
@@ -201,16 +254,22 @@ mod tests {
     #[test]
     fn call_return() {
         let mut vm = VM::default();
-        vm.load(&[
-            // func main
+
+        let main_id = vm.create_function();
+        let add_id = vm.create_function();
+
+        let main = vec![
             Op::MovI(0, 1),
             Op::MovI(1, 2),
-            Op::Call(2), // call add
+            Op::Call(add_id.0 as ExtendedImmediate), // call add
             Op::Ret,
-            // func add
-            Op::Add(0, 0, 1),
-            Op::Ret,
-        ]);
+        ];
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
+
+        let add = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
+
+        vm.set_entrypoint(main_id);
 
         for _ in 0..5 {
             vm.step().expect("program should run without errors");
@@ -223,32 +282,157 @@ mod tests {
         assert!(vm.call_stack.is_empty());
     }
 
-    //#[test]
-    //fn call_neg_offset() {
-    //    let mut vm = VM::default();
-    //    let program = [
-    //        // func main
-    //        Op::MovI(0, 3),
-    //        Op::Call(4), // call double
-    //        Op::Ret,
-    //        // func add
-    //        Op::Add(0, 0, 1),
-    //        Op::Ret,
-    //        // func double
-    //        Op::Mov(1, 0),
-    //        Op::Call((0 as ExtendedImmediate).wrapping_sub(3)), // call add
-    //        Op::Ret,
-    //    ];
-    //
-    //    vm.load(&program);
-    //
-    //    for _ in 0..7 {
-    //        vm.step().expect("program should run without errors");
-    //    }
-    //
-    //    assert_eq!(6, vm.current_frame().locals[0]);
-    //
-    //    vm.step().expect("program should run without errors");
-    //    assert!(vm.call_stack.is_empty());
-    //}
+    #[test]
+    fn create_order_irrelevant() {
+        let mut vm1 = VM::default();
+
+        let main_id1 = vm1.create_function();
+        let add_id1 = vm1.create_function();
+
+        let main1 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id1.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        vm1.initialize_function(
+            main_id1,
+            encode_func(main1).into_boxed_slice(),
+        );
+
+        let add1 = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm1.initialize_function(add_id1, encode_func(add1).into_boxed_slice());
+
+        vm1.set_entrypoint(main_id1);
+
+        for _ in 0..5 {
+            vm1.step().expect("vm1 program should run without errors");
+        }
+
+        // same for vm2
+        let mut vm2 = VM::default();
+
+        // swapped creation order
+        let add_id2 = vm2.create_function();
+        let main_id2 = vm2.create_function();
+
+        let main2 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id2.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        vm2.initialize_function(
+            main_id2,
+            encode_func(main2).into_boxed_slice(),
+        );
+
+        let add2 = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm2.initialize_function(add_id2, encode_func(add2).into_boxed_slice());
+
+        vm2.set_entrypoint(main_id2);
+
+        for _ in 0..5 {
+            vm2.step().expect("vm2 program should run without errors");
+        }
+
+        assert_eq!(vm1.current_frame().locals, vm2.current_frame().locals);
+    }
+
+    #[test]
+    fn init_order_irrelevant() {
+        let mut vm1 = VM::default();
+
+        let main_id1 = vm1.create_function();
+        let add_id1 = vm1.create_function();
+
+        let main1 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id1.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        vm1.initialize_function(
+            main_id1,
+            encode_func(main1).into_boxed_slice(),
+        );
+
+        let add1 = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm1.initialize_function(add_id1, encode_func(add1).into_boxed_slice());
+
+        vm1.set_entrypoint(main_id1);
+
+        for _ in 0..5 {
+            vm1.step().expect("vm1 program should run without errors");
+        }
+
+        // same for vm2
+        let mut vm2 = VM::default();
+
+        let main_id2 = vm2.create_function();
+        let add_id2 = vm2.create_function();
+
+        let main2 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id2.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        let add2 = vec![Op::Add(0, 0, 1), Op::Ret];
+
+        // swapped init order
+        vm2.initialize_function(add_id2, encode_func(add2).into_boxed_slice());
+        vm2.initialize_function(
+            main_id2,
+            encode_func(main2).into_boxed_slice(),
+        );
+
+        vm2.set_entrypoint(main_id2);
+
+        for _ in 0..5 {
+            vm2.step().expect("vm2 program should run without errors");
+        }
+
+        assert_eq!(vm1.current_frame().locals, vm2.current_frame().locals);
+    }
+
+    #[test]
+    fn call_multiple() {
+        let mut vm = VM::default();
+
+        let main_id = vm.create_function();
+        let add_id = vm.create_function();
+        let double_id = vm.create_function();
+
+        let main = vec![
+            Op::MovI(0, 3),
+            Op::Call(double_id.0 as ExtendedImmediate), // call double
+            Op::Ret,
+        ];
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
+
+        let add = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
+
+        let double = vec![
+            Op::Mov(1, 0),
+            Op::Call(add_id.0 as ExtendedImmediate), // call add
+            Op::Ret,
+        ];
+        vm.initialize_function(
+            double_id,
+            encode_func(double).into_boxed_slice(),
+        );
+
+        vm.set_entrypoint(main_id);
+
+        for _ in 0..7 {
+            vm.step().expect("program should run without errors");
+        }
+
+        assert_eq!(6, vm.current_frame().locals[0]);
+
+        vm.step().expect("program should run without errors");
+        assert!(vm.call_stack.is_empty());
+    }
 }
