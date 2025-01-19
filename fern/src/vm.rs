@@ -51,7 +51,7 @@ impl Default for VM {
             // this return address doesn't matter because execution stops
             // when this frame is popped
             call_stack: vec![StackFrame::new_returning_to(0)],
-            ip: 0,
+            ip: UNINITIALIZED_FUNCTION, // expect user to call `set_entrypoint`
         }
     }
 }
@@ -91,8 +91,14 @@ impl VM {
         self.functions[function_id.0] = start_addr
     }
 
+    /// Sets the function to run when the VM starts. Must be called before
+    /// executing code using `run`.
+    pub fn set_entrypoint(&mut self, function: FunctionId) {
+        self.ip = self.functions[function.0]
+    }
+
     /// Runs the [`VM`] until the call stack is empty. Execution begins at the
-    /// first instruction of the first function.
+    /// function provided in `set_entrypoint`.
     pub fn run(&mut self) -> VMResult {
         while !self.call_stack.is_empty() {
             self.step()?;
@@ -231,6 +237,7 @@ mod tests {
         let main =
             vec![Op::MovI(0, 1), Op::MovI(1, 2), Op::Add(2, 0, 1), Op::Ret];
         vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
+        vm.set_entrypoint(main_id);
 
         for _ in 0..3 {
             vm.step().expect("program should run without errors")
@@ -262,6 +269,8 @@ mod tests {
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
         vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
 
+        vm.set_entrypoint(main_id);
+
         for _ in 0..5 {
             vm.step().expect("program should run without errors");
         }
@@ -286,23 +295,22 @@ mod tests {
             Op::Call(double_id.0 as ExtendedImmediate), // call double
             Op::Ret,
         ];
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
 
         let add = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
 
         let double = vec![
             Op::Mov(1, 0),
             Op::Call(add_id.0 as ExtendedImmediate), // call add
             Op::Ret,
         ];
-
-        vm.initialize_function(add_id, encode_func(add).into_boxed_slice());
-
-        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
-
         vm.initialize_function(
             double_id,
             encode_func(double).into_boxed_slice(),
         );
+
+        vm.set_entrypoint(main_id);
 
         for _ in 0..7 {
             vm.step().expect("program should run without errors");

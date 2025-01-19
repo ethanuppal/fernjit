@@ -5,6 +5,7 @@ use std::ops::Range;
 pub type Word = u32;
 
 #[must_use]
+#[derive(Clone, Copy, Debug)]
 pub struct FunctionId(pub usize);
 
 pub type InstructionAddress = usize;
