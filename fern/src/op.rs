@@ -1,9 +1,9 @@
 // Copyright (C) 2024 Ethan Uppal. All rights reserved.
 
 use enum_tags::enum_tags;
+use static_assertions::const_assert;
 
 use crate::arch::{LocalAddress, Word, LOCAL_ADDRESS_BITS};
-use static_assertions::const_assert;
 
 /// Smallest sized integer type that can fit an op code.
 pub type RawOpCode = u8;
