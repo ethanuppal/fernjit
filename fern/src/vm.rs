@@ -283,6 +283,120 @@ mod tests {
     }
 
     #[test]
+    fn create_order_irrelevant() {
+        let mut vm1 = VM::default();
+
+        let main_id1 = vm1.create_function();
+        let add_id1 = vm1.create_function();
+
+        let main1 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id1.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        vm1.initialize_function(
+            main_id1,
+            encode_func(main1).into_boxed_slice(),
+        );
+
+        let add1 = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm1.initialize_function(add_id1, encode_func(add1).into_boxed_slice());
+
+        vm1.set_entrypoint(main_id1);
+
+        for _ in 0..5 {
+            vm1.step().expect("vm1 program should run without errors");
+        }
+
+        // same for vm2
+        let mut vm2 = VM::default();
+
+        // swapped creation order
+        let add_id2 = vm2.create_function();
+        let main_id2 = vm2.create_function();
+
+        let main2 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id2.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        vm2.initialize_function(
+            main_id2,
+            encode_func(main2).into_boxed_slice(),
+        );
+
+        let add2 = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm2.initialize_function(add_id2, encode_func(add2).into_boxed_slice());
+
+        vm2.set_entrypoint(main_id2);
+
+        for _ in 0..5 {
+            vm2.step().expect("vm2 program should run without errors");
+        }
+
+        assert_eq!(vm1.current_frame().locals, vm2.current_frame().locals);
+    }
+
+    #[test]
+    fn init_order_irrelevant() {
+        let mut vm1 = VM::default();
+
+        let main_id1 = vm1.create_function();
+        let add_id1 = vm1.create_function();
+
+        let main1 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id1.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        vm1.initialize_function(
+            main_id1,
+            encode_func(main1).into_boxed_slice(),
+        );
+
+        let add1 = vec![Op::Add(0, 0, 1), Op::Ret];
+        vm1.initialize_function(add_id1, encode_func(add1).into_boxed_slice());
+
+        vm1.set_entrypoint(main_id1);
+
+        for _ in 0..5 {
+            vm1.step().expect("vm1 program should run without errors");
+        }
+
+        // same for vm2
+        let mut vm2 = VM::default();
+
+        let main_id2 = vm2.create_function();
+        let add_id2 = vm2.create_function();
+
+        let main2 = vec![
+            Op::MovI(0, 1),
+            Op::MovI(1, 2),
+            Op::Call(add_id2.0 as ExtendedImmediate),
+            Op::Ret,
+        ];
+        let add2 = vec![Op::Add(0, 0, 1), Op::Ret];
+
+        // swapped init order
+        vm2.initialize_function(add_id2, encode_func(add2).into_boxed_slice());
+        vm2.initialize_function(
+            main_id2,
+            encode_func(main2).into_boxed_slice(),
+        );
+
+        vm2.set_entrypoint(main_id2);
+
+        for _ in 0..5 {
+            vm2.step().expect("vm2 program should run without errors");
+        }
+
+        assert_eq!(vm1.current_frame().locals, vm2.current_frame().locals);
+    }
+
+    #[test]
     fn call_multiple() {
         let mut vm = VM::default();
 
