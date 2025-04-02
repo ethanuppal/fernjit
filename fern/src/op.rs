@@ -62,9 +62,6 @@ pub enum Op {
     /// `Self::Add(a, b, c)` loads the sum of the contents at addresses `b` and
     /// `c`  at address `a`.
     Add(LocalAddress, LocalAddress, LocalAddress),
-    /// `Self::Sub(a, b, c)` loads the difference of the contents at addresses
-    /// `b` and `c` at address `a`.
-    // Sub(LocalAddress, LocalAddress, LocalAddress),
     /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
     /// VM function, pushing a new call frame.
     Call(ExtendedImmediate),
@@ -86,7 +83,6 @@ impl Op {
             Self::Mov(a, b) => Self::encode_packed_ab_args(a, b),
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Add(a, b, c) => Self::encode_packed_abc_args(a, b, c),
-            // Self::Sub(a, b, c) => Self::encode_packed_abc_args(a, b, c),
             Self::Call(ix) => Self::encode_packed_ix_args(ix),
             Self::Bnz(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Ret | Self::Nop => 0,
