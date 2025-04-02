@@ -1,7 +1,5 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
-use std::vec;
-
 use crate::{
     arch::{
         FunctionId, InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS,
@@ -122,7 +120,10 @@ impl VM {
                 self.jump_to(self.ip + 1)
             }
             Op::Add(to, first, second) => {
-                let sum = self.read_local(first) + self.read_local(second);
+                let sum = self
+                    .read_local(first)
+                    .wrapping_add(self.read_local(second));
+
                 self.write_local(to, sum);
                 self.jump_to(self.ip + 1)
             }
@@ -150,6 +151,17 @@ impl VM {
                 self.call_stack.push(callee_frame);
 
                 self.jump_to_function(func_id)
+            }
+            Op::Bnz(a, offset) => {
+                let value = self.read_local(a);
+                if value != 0 {
+                    let extended: InstructionAddress =
+                        sign_extend_to(offset, IMM_BITS);
+
+                    self.jump_to(self.ip.wrapping_add(extended))
+                } else {
+                    self.jump_to(self.ip + 1)
+                }
             }
             Op::Nop => Ok(()),
         }?;
@@ -203,30 +215,50 @@ impl VM {
 
 fn sign_extend_to<
     In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
-    Out: 'static + num_traits::Unsigned + Copy,
+    Out: 'static + num_traits::Unsigned + num_traits::PrimInt + Copy,
 >(
     value: In,
     bits: usize,
 ) -> Out {
-    let sign_bit = In::one() << (bits - 1);
-    if value & sign_bit != In::zero() {
-        let extension = !((In::one() << bits) - In::one());
-        value | extension
+    let sign_bit = Out::one() << (bits - 1);
+    let value_out: Out = value.as_();
+
+    if value_out & sign_bit != Out::zero() {
+        let extension = !((Out::one() << bits) - Out::one());
+        value_out | extension
     } else {
-        value
+        value_out
     }
-    .as_()
 }
 
 #[cfg(test)]
 mod tests {
+    use super::VMError;
     use crate::{
-        op::{ExtendedImmediate, Op},
+        arch::{Word, LOCALS_COUNT},
+        op::{ExtendedImmediate, Immediate, Op},
         vm::VM,
     };
 
     fn encode_func(ops: Vec<Op>) -> Vec<u32> {
         ops.into_iter().map(|op| op.encode_packed()).collect()
+    }
+
+    // nom nom nom eat vm
+    fn run_to_exit(mut vm: VM) -> Result<[Word; LOCALS_COUNT], VMError> {
+        loop {
+            match vm.decode_op() {
+                Op::Ret => {
+                    if vm.call_stack.len() == 1 {
+                        let locals = vm.call_stack[0].locals;
+                        vm.step()?;
+                        return Ok(locals);
+                    };
+                }
+                _ => {}
+            }
+            vm.step()?;
+        }
     }
 
     #[test]
@@ -239,16 +271,12 @@ mod tests {
         vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
         vm.set_entrypoint(main_id);
 
-        for _ in 0..3 {
-            vm.step().expect("program should run without errors")
-        }
+        let main_locals =
+            run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(1, vm.current_frame().locals[0]);
-        assert_eq!(2, vm.current_frame().locals[1]);
-        assert_eq!(3, vm.current_frame().locals[2]);
-
-        vm.step().expect("program should run without errors");
-        assert!(vm.call_stack.is_empty());
+        assert_eq!(1, main_locals[0]);
+        assert_eq!(2, main_locals[1]);
+        assert_eq!(3, main_locals[2]);
     }
 
     #[test]
@@ -271,15 +299,11 @@ mod tests {
 
         vm.set_entrypoint(main_id);
 
-        for _ in 0..5 {
-            vm.step().expect("program should run without errors");
-        }
+        let main_locals =
+            run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(3, vm.current_frame().locals[0]);
-        assert_eq!(2, vm.current_frame().locals[1]);
-
-        vm.step().expect("program should run without errors");
-        assert!(vm.call_stack.is_empty());
+        assert_eq!(3, main_locals[0]);
+        assert_eq!(2, main_locals[1]);
     }
 
     #[test]
@@ -305,9 +329,8 @@ mod tests {
 
         vm1.set_entrypoint(main_id1);
 
-        for _ in 0..5 {
-            vm1.step().expect("vm1 program should run without errors");
-        }
+        let vm1_locals =
+            run_to_exit(vm1).expect("vm1 program should run without errors");
 
         // same for vm2
         let mut vm2 = VM::default();
@@ -332,11 +355,10 @@ mod tests {
 
         vm2.set_entrypoint(main_id2);
 
-        for _ in 0..5 {
-            vm2.step().expect("vm2 program should run without errors");
-        }
+        let vm2_locals =
+            run_to_exit(vm2).expect("vm2 program should run without errors");
 
-        assert_eq!(vm1.current_frame().locals, vm2.current_frame().locals);
+        assert_eq!(vm1_locals, vm2_locals);
     }
 
     #[test]
@@ -362,9 +384,8 @@ mod tests {
 
         vm1.set_entrypoint(main_id1);
 
-        for _ in 0..5 {
-            vm1.step().expect("vm1 program should run without errors");
-        }
+        let vm1_locals =
+            run_to_exit(vm1).expect("vm1 program should run without errors");
 
         // same for vm2
         let mut vm2 = VM::default();
@@ -389,11 +410,10 @@ mod tests {
 
         vm2.set_entrypoint(main_id2);
 
-        for _ in 0..5 {
-            vm2.step().expect("vm2 program should run without errors");
-        }
+        let vm2_locals =
+            run_to_exit(vm2).expect("vm2 program should run without errors");
 
-        assert_eq!(vm1.current_frame().locals, vm2.current_frame().locals);
+        assert_eq!(vm1_locals, vm2_locals);
     }
 
     #[test]
@@ -426,13 +446,32 @@ mod tests {
 
         vm.set_entrypoint(main_id);
 
-        for _ in 0..7 {
-            vm.step().expect("program should run without errors");
-        }
+        let locals =
+            run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(6, vm.current_frame().locals[0]);
+        assert_eq!(6, locals[0]);
+    }
 
-        vm.step().expect("program should run without errors");
-        assert!(vm.call_stack.is_empty());
+    #[test]
+    fn basic_loop() {
+        let mut vm = VM::default();
+
+        let main_id = vm.create_function();
+        let main = vec![
+            Op::MovI(0, 0),                  // sum = 0
+            Op::MovI(1, 10),                 // i = 10
+            Op::MovI(2, -1i16 as Immediate), // j = -1
+            Op::Add(0, 0, 1),                // sum += i
+            Op::Add(1, 1, 2),                // i = i + j
+            Op::Bnz(1, -2i16 as Immediate),  // i != 0
+            Op::Ret,
+        ];
+        vm.initialize_function(main_id, encode_func(main).into_boxed_slice());
+        vm.set_entrypoint(main_id);
+
+        let locals =
+            run_to_exit(vm).expect("program should run without errors");
+
+        assert_eq!(55, locals[0]);
     }
 }

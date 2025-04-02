@@ -55,14 +55,23 @@ mod encoding_spec {
 pub enum Op {
     /// `Self::Mov(a, b)` copies the contents at address `b` to `a`.
     Mov(LocalAddress, LocalAddress),
-    /// `Self::MovI(a, i)` loads `i` at address `a`.
+    /// `Self::MovI(a, i)` loads `i` at address `a`. `i` is treated as an
+    /// `IMM_BITS`-bit twos-complement integer (that is, it is automatically
+    /// sign extended).
     MovI(LocalAddress, Immediate),
     /// `Self::Add(a, b, c)` loads the sum of the contents at addresses `b` and
     /// `c`  at address `a`.
     Add(LocalAddress, LocalAddress, LocalAddress),
+    /// `Self::Sub(a, b, c)` loads the difference of the contents at addresses
+    /// `b` and `c` at address `a`.
+    // Sub(LocalAddress, LocalAddress, LocalAddress),
     /// `Self::Call(ix)` saves the instruction pointer and jumps to the `ix`th
     /// VM function, pushing a new call frame.
     Call(ExtendedImmediate),
+    /// `Self::Bnz(a, i)` jumps to the instruction within the current VM
+    /// function offset by `i` if the contents at address `a` are not zero.
+    /// `i` is treated as an `IMM_BITS`-bit twos-complement integer.
+    Bnz(LocalAddress, Immediate),
     /// `Self::Ret` restores the previous call frame and restores the
     /// instruction pointer.
     Ret,
@@ -77,7 +86,9 @@ impl Op {
             Self::Mov(a, b) => Self::encode_packed_ab_args(a, b),
             Self::MovI(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Add(a, b, c) => Self::encode_packed_abc_args(a, b, c),
+            // Self::Sub(a, b, c) => Self::encode_packed_abc_args(a, b, c),
             Self::Call(ix) => Self::encode_packed_ix_args(ix),
+            Self::Bnz(a, i) => Self::encode_packed_ai_args(a, i),
             Self::Ret | Self::Nop => 0,
         };
 
@@ -92,7 +103,9 @@ impl Op {
             Self::MOV_TAG => Self::decode_packed_ab_args(args, Self::Mov),
             Self::MOVI_TAG => Self::decode_packed_ai_args(args, Self::MovI),
             Self::ADD_TAG => Self::decode_packed_abc_args(args, Self::Add),
+            // Self::SUB_TAG => Self::decode_packed_abc_args(args, Self::Sub),
             Self::CALL_TAG => Self::decode_packed_ix_args(args, Self::Call),
+            Self::BNZ_TAG => Self::decode_packed_ai_args(args, Self::Bnz),
             Self::RET_TAG => Some(Self::Ret),
             Self::NOP_TAG => Some(Self::Nop),
             _ => None,
