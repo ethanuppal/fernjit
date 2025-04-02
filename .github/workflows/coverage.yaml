@@ -1,0 +1,25 @@
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust Caching
+        uses: Swatinem/rust-cache@v2.7.3
+      - name: Install dependencies
+        run: make deps
+      - name: Check coverage
+        run: make test_cov_vm COVERALLS=${{ secrets.COVERALLS_REPO_TOKEN }}
+      # - name: Coveralls
+      #   uses: coverallsapp/github-action@v2
