@@ -247,15 +247,12 @@ mod tests {
     // nom nom nom eat vm
     fn run_to_exit(mut vm: VM) -> Result<[Word; LOCALS_COUNT], VMError> {
         loop {
-            match vm.decode_op() {
-                Op::Ret => {
-                    if vm.call_stack.len() == 1 {
-                        let locals = vm.call_stack[0].locals;
-                        vm.step()?;
-                        return Ok(locals);
-                    };
-                }
-                _ => {}
+            if let Op::Ret = vm.decode_op() {
+                if vm.call_stack.len() == 1 {
+                    let locals = vm.call_stack[0].locals;
+                    vm.step()?;
+                    return Ok(locals);
+                };
             }
             vm.step()?;
         }
