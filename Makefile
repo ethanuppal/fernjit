@@ -18,7 +18,7 @@ test_native:
 .PHONY: deps
 deps:
 ifeq ($(UNAME), Darwin)
-	rustup toolchain install stable-x86_64-apple-darwin
+	rustup toolchain install stable-x86_64-apple-darwin --force-non-host
 endif
 	curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 	cargo binstall cargo-tarpaulin
