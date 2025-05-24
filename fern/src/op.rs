@@ -15,19 +15,19 @@ pub type Immediate = u16;
 pub type ExtendedImmediate = u32;
 
 /// Bits for opcode.
-pub const OPCODE_BITS: usize = 8; // not using `::BITS` here because types are
-                                  // just smallest thing that can fit; this is
-                                  // the actual number of bits, which may be
-                                  // less.
-const_assert!(OPCODE_BITS <= RawOpCode::BITS as usize);
+pub const OPCODE_BITS: u32 = 8; // not using `::BITS` here because types are
+                                // just smallest thing that can fit; this is
+                                // the actual number of bits, which may be
+                                // less.
+const_assert!(OPCODE_BITS <= RawOpCode::BITS);
 
 /// Bits for immediate value.
-pub const IMM_BITS: usize = 16;
-const_assert!(IMM_BITS <= Immediate::BITS as usize);
+pub const IMM_BITS: u32 = 16;
+const_assert!(IMM_BITS <= Immediate::BITS);
 
 /// Bits for extended immediate value.
-pub const IMM_EXT_BITS: usize = 24;
-const_assert!(IMM_EXT_BITS <= ExtendedImmediate::BITS as usize);
+pub const IMM_EXT_BITS: u32 = 24;
+const_assert!(IMM_EXT_BITS <= ExtendedImmediate::BITS);
 
 #[rustfmt::skip]
 mod encoding_spec {
@@ -37,15 +37,15 @@ mod encoding_spec {
 //  | Encodings (inspired by Lua). `Op`s fit in one `Word`.                              |
 //  +------------------------------------------------------------------------------------+
 //  | ABC (3 addresses):                                                                 |
-      const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+      const_assert!(OPCODE_BITS + 3 * LOCAL_ADDRESS_BITS <= Word::BITS); 
 //  | AB (2 addresses):                                                                  |
-      const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= Word::BITS as usize); 
+      const_assert!(OPCODE_BITS + 2 * LOCAL_ADDRESS_BITS <= Word::BITS); 
 //  | AI (address + immediate)                                                           |
-      const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= Word::BITS as usize); 
+      const_assert!(OPCODE_BITS + LOCAL_ADDRESS_BITS + IMM_BITS <= Word::BITS); 
 //  | IX (extended immediate)                                                            |
-      const_assert!(OPCODE_BITS + IMM_EXT_BITS <= Word::BITS as usize);
+      const_assert!(OPCODE_BITS + IMM_EXT_BITS <= Word::BITS);
 //  | N (no operands)                                                                    | 
-      const_assert!(OPCODE_BITS <= Word::BITS as usize);
+      const_assert!(OPCODE_BITS <= Word::BITS);
 //  +------------------------------------------------------------------------------------+
 }
 
@@ -163,7 +163,7 @@ impl Op {
     }
 }
 
-pub const fn bitmask(bits: usize) -> Word {
+pub const fn bitmask(bits: u32) -> Word {
     ((1 as Word) << bits).wrapping_sub(1)
 }
 

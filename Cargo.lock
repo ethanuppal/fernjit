@@ -25,10 +25,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fern-nan-box"
+version = "0.0.0"
+dependencies = [
+ "num-traits",
+ "static_assertions",
+]
+
+[[package]]
 name = "fern-vm"
 version = "0.0.0"
 dependencies = [
  "fern-enum-tags",
+ "fern-nan-box",
  "num-traits",
  "paste",
  "static_assertions",

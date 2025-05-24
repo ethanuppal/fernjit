@@ -116,7 +116,8 @@ impl VM {
                 self.jump_to(self.ip + 1)
             }
             Op::MovI(to, constant) => {
-                let extended: Word = sign_extend_to(constant, IMM_BITS);
+                let extended: Word =
+                    nan_box::bit_manip::sign_extend_to(constant, IMM_BITS);
 
                 self.write_local(to, extended);
                 self.jump_to(self.ip + 1)
@@ -199,23 +200,6 @@ impl VM {
             .last_mut()
             .expect("call stack should always have one frame while running.")
     }
-}
-
-fn sign_extend_to<
-    In: num_traits::Unsigned + num_traits::PrimInt + num_traits::AsPrimitive<Out>,
-    Out: 'static + num_traits::Unsigned + Copy,
->(
-    value: In,
-    bits: usize,
-) -> Out {
-    let sign_bit = In::one() << (bits - 1);
-    if value & sign_bit != In::zero() {
-        let extension = !((In::one() << bits) - In::one());
-        value | extension
-    } else {
-        value
-    }
-    .as_()
 }
 
 #[cfg(test)]

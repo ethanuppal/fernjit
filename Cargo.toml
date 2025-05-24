@@ -1,5 +1,5 @@
 [workspace]
-members = ["enum_tags", "fern", "jit"]
+members = ["enum_tags", "fern", "jit", "nan_box"]
 resolver = "2"
 
 [workspace.package]
@@ -18,3 +18,4 @@ quote = "1.0.37"
 proc-macro2 = "1.0.92"
 num-traits = "0.2.19"
 enum_tags = { path = "enum_tags/", package = "fern-enum-tags", version = "0.0.0" }
+nan_box = { path = "nan_box/", package = "fern-nan-box", version = "0.0.0" }

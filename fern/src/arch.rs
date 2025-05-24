@@ -12,8 +12,8 @@ pub struct FunctionId(pub usize);
 pub type InstructionAddress = usize;
 pub type LocalAddress = u8;
 
-pub const LOCAL_ADDRESS_BITS: usize = 8;
-const_assert!(LOCAL_ADDRESS_BITS <= LocalAddress::BITS as usize);
+pub const LOCAL_ADDRESS_BITS: u32 = 8;
+const_assert!(LOCAL_ADDRESS_BITS <= LocalAddress::BITS);
 
 pub const LOCALS_COUNT: usize = 256;
 const_assert!(LOCALS_COUNT <= LocalAddress::MAX as usize + 1);
