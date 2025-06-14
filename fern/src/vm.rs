@@ -1,5 +1,7 @@
 // Copyright (C) 2024 Ethan Uppal and Utku Melemetci. All rights reserved.
 
+use boxing::nan::NanBox;
+
 use crate::{
     arch::{
         FunctionId, InstructionAddress, LocalAddress, Word, ARGUMENT_LOCALS,
@@ -8,10 +10,10 @@ use crate::{
     op::{Op, IMM_BITS},
 };
 
-pub struct VM {
+pub struct VM<'a> {
     code: Vec<Word>,
     functions: Vec<InstructionAddress>,
-    call_stack: Vec<StackFrame>,
+    call_stack: Vec<StackFrame<'a>>,
     ip: InstructionAddress,
 }
 
@@ -27,21 +29,41 @@ pub enum VMError {
 
 pub type VMResult = Result<(), VMError>;
 
-struct StackFrame {
-    locals: [Word; LOCALS_COUNT],
+struct StackFrame<'a> {
+    locals: [NanBox<'a, ()>; LOCALS_COUNT],
     return_address: InstructionAddress,
 }
 
-impl StackFrame {
+impl StackFrame<'_> {
     fn new_returning_to(return_address: InstructionAddress) -> Self {
         Self {
-            locals: [0; LOCALS_COUNT],
+            locals: std::array::from_fn(|_| NanBox::from_float(0.0)),
             return_address,
         }
     }
 }
 
-impl Default for VM {
+enum NanBoxUnpacked<'a, T> {
+    F64(&'a f64),
+    U32(&'a u32),
+    T(&'a T),
+}
+
+fn unpack_nanbox<'a, T>(
+    nanbox: &'a NanBox<'a, T>,
+) -> Option<NanBoxUnpacked<'a, T>> {
+    if let Some(r) = nanbox.try_ref_float() {
+        Some(NanBoxUnpacked::F64(r))
+    } else if let Some(r) = nanbox.try_ref_inline::<u32>() {
+        Some(NanBoxUnpacked::U32(r))
+    } else if let Some(r) = nanbox.try_ref_boxed() {
+        Some(NanBoxUnpacked::T(r))
+    } else {
+        None
+    }
+}
+
+impl Default for VM<'_> {
     fn default() -> Self {
         Self {
             code: vec![],
@@ -54,7 +76,7 @@ impl Default for VM {
     }
 }
 
-impl VM {
+impl<'a> VM<'a> {
     /// Creates a VM function, returning a [`FunctionId`] that can be used to
     /// refer to it. You must later assign code to the given function ID using
     /// `initialize_function`.
@@ -104,27 +126,56 @@ impl VM {
         Ok(())
     }
 
-    fn step(&mut self) -> VMResult {
+    fn step<'b>(&'b mut self) -> VMResult
+    where
+        'a: 'b,
+    {
         match self.decode_op() {
             Op::Mov(to, from) => {
                 // note that we do not validate local addresses here
                 // it is not a VM responsibility to validate the program
 
-                self.write_local(to, self.read_local(from));
+                self.write_local(to, self.read_local(from).clone());
                 self.jump_to(self.ip + 1)
             }
             Op::MovI(to, constant) => {
-                let extended: Word = sign_extend_to(constant, IMM_BITS);
+                let extended: u32 = sign_extend_to(constant, IMM_BITS);
 
-                self.write_local(to, extended);
+                self.write_local(to, NanBox::from_inline(extended));
                 self.jump_to(self.ip + 1)
             }
             Op::Add(to, first, second) => {
-                let sum = self
-                    .read_local(first)
-                    .wrapping_add(self.read_local(second));
+                match (
+                    unpack_nanbox(self.read_local(first)),
+                    unpack_nanbox(self.read_local(second)),
+                ) {
+                    (Some(first_unpacked), Some(second_unpacked)) => {
+                        match (first_unpacked, second_unpacked) {
+                            (
+                                NanBoxUnpacked::F64(a),
+                                NanBoxUnpacked::F64(b),
+                            ) => {
+                                self.write_local(
+                                    to,
+                                    NanBox::from_float(*a + *b),
+                                );
+                            }
+                            (
+                                NanBoxUnpacked::U32(a),
+                                NanBoxUnpacked::U32(b),
+                            ) => {
+                                self.write_local(
+                                    to,
+                                    NanBox::from_inline(a.wrapping_add(*b)),
+                                );
+                            }
+                            _ => panic!("Tried to add two incompatible types."),
+                        }
+                    }
 
-                self.write_local(to, sum);
+                    _ => panic!("Encountered invalid type."),
+                }
+
                 self.jump_to(self.ip + 1)
             }
             Op::Ret => {
@@ -135,7 +186,7 @@ impl VM {
 
                 if let Some(caller_frame) = self.call_stack.last_mut() {
                     caller_frame.locals[RETURN_LOCALS]
-                        .copy_from_slice(&callee_frame.locals[RETURN_LOCALS]);
+                        .clone_from_slice(&callee_frame.locals[RETURN_LOCALS]);
                 }
 
                 self.jump_to(return_address)
@@ -145,15 +196,21 @@ impl VM {
 
                 let mut callee_frame =
                     StackFrame::new_returning_to(self.ip + 1);
-                callee_frame.locals[ARGUMENT_LOCALS].copy_from_slice(
+
+                callee_frame.locals[ARGUMENT_LOCALS].clone_from_slice(
                     &self.current_frame().locals[ARGUMENT_LOCALS],
                 );
+
                 self.call_stack.push(callee_frame);
 
                 self.jump_to_function(func_id)
             }
             Op::Bnz(a, offset) => {
-                let value = self.read_local(a);
+                let value = *self
+                    .read_local(a)
+                    .try_ref_inline::<u32>()
+                    .expect("branch not zero on non-integer");
+
                 if value != 0 {
                     let extended: InstructionAddress =
                         sign_extend_to(offset, IMM_BITS);
@@ -192,21 +249,21 @@ impl VM {
         self.jump_to(start_address)
     }
 
-    fn read_local(&self, address: LocalAddress) -> Word {
-        self.current_frame().locals[address as usize]
+    fn read_local(&self, address: LocalAddress) -> &NanBox<'a, ()> {
+        &self.current_frame().locals[address as usize]
     }
 
-    fn write_local(&mut self, address: LocalAddress, value: Word) {
+    fn write_local(&mut self, address: LocalAddress, value: NanBox<'a, ()>) {
         self.current_frame_mut().locals[address as usize] = value;
     }
 
-    fn current_frame(&self) -> &StackFrame {
+    fn current_frame(&self) -> &StackFrame<'a> {
         self.call_stack
             .last()
             .expect("call stack should always have one frame while running.")
     }
 
-    fn current_frame_mut(&mut self) -> &mut StackFrame {
+    fn current_frame_mut(&mut self) -> &mut StackFrame<'a> {
         self.call_stack
             .last_mut()
             .expect("call stack should always have one frame while running.")
@@ -218,13 +275,13 @@ fn sign_extend_to<
     Out: 'static + num_traits::Unsigned + num_traits::PrimInt + Copy,
 >(
     value: In,
-    bits: usize,
+    in_bits: usize,
 ) -> Out {
-    let sign_bit = Out::one() << (bits - 1);
+    let sign_bit = Out::one() << (in_bits - 1);
     let value_out: Out = value.as_();
 
     if value_out & sign_bit != Out::zero() {
-        let extension = !((Out::one() << bits) - Out::one());
+        let extension = !((Out::one() << in_bits) - Out::one());
         value_out | extension
     } else {
         value_out
@@ -233,6 +290,8 @@ fn sign_extend_to<
 
 #[cfg(test)]
 mod tests {
+    use boxing::nan::NanBox;
+
     use super::VMError;
     use crate::{
         arch::{Word, LOCALS_COUNT},
@@ -240,16 +299,18 @@ mod tests {
         vm::VM,
     };
 
-    fn encode_func(ops: Vec<Op>) -> Vec<u32> {
+    fn encode_func(ops: Vec<Op>) -> Vec<Word> {
         ops.into_iter().map(|op| op.encode_packed()).collect()
     }
 
     // nom nom nom eat vm
-    fn run_to_exit(mut vm: VM) -> Result<[Word; LOCALS_COUNT], VMError> {
+    fn run_to_exit(
+        mut vm: VM,
+    ) -> Result<[NanBox<'_, ()>; LOCALS_COUNT], VMError> {
         loop {
             if let Op::Ret = vm.decode_op() {
                 if vm.call_stack.len() == 1 {
-                    let locals = vm.call_stack[0].locals;
+                    let locals = vm.call_stack[0].locals.clone();
                     vm.step()?;
                     return Ok(locals);
                 };
@@ -271,9 +332,9 @@ mod tests {
         let main_locals =
             run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(1, main_locals[0]);
-        assert_eq!(2, main_locals[1]);
-        assert_eq!(3, main_locals[2]);
+        assert_eq!(1u32, main_locals[0].clone().try_into_inline().unwrap());
+        assert_eq!(2u32, main_locals[1].clone().try_into_inline().unwrap());
+        assert_eq!(3u32, main_locals[2].clone().try_into_inline().unwrap());
     }
 
     #[test]
@@ -299,8 +360,8 @@ mod tests {
         let main_locals =
             run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(3, main_locals[0]);
-        assert_eq!(2, main_locals[1]);
+        assert_eq!(3u32, main_locals[0].clone().try_into_inline().unwrap());
+        assert_eq!(2u32, main_locals[1].clone().try_into_inline().unwrap());
     }
 
     #[test]
@@ -446,7 +507,7 @@ mod tests {
         let locals =
             run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(6, locals[0]);
+        assert_eq!(6u32, locals[0].clone().try_into_inline().unwrap());
     }
 
     #[test]
@@ -469,6 +530,6 @@ mod tests {
         let locals =
             run_to_exit(vm).expect("program should run without errors");
 
-        assert_eq!(55, locals[0]);
+        assert_eq!(55u32, locals[0].clone().try_into_inline().unwrap());
     }
 }

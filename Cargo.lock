@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "boxing"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a817f12ef805b34fe1565bea00630d84f8f08bf26200b05c41456c77cdada88"
+dependencies = [
+ "sptr",
+]
+
+[[package]]
 name = "fern-enum-tags"
 version = "0.0.0"
 dependencies = [
@@ -28,6 +37,7 @@ dependencies = [
 name = "fern-vm"
 version = "0.0.0"
 dependencies = [
+ "boxing",
  "fern-enum-tags",
  "num-traits",
  "paste",
@@ -72,6 +82,12 @@ checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "sptr"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "static_assertions"
